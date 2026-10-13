@@ -184,6 +184,86 @@ class AnalyzedProblem(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class AnalysisJob(Base):
+    __tablename__ = "analysis_jobs"
+
+    id = Column(String(64), primary_key=True)
+    repo_url = Column(String(512), index=True, nullable=False)
+    submitted_by_email = Column(String(255), index=True, nullable=True)
+    submitted_by_name = Column(String(255), nullable=True)
+    status = Column(String(32), default="queued", index=True)  # queued, analyzing, completed, failed
+    progress_stage = Column(String(64), default="Queued")
+    progress_percent = Column(Integer, default=5)
+    error_message = Column(Text, nullable=True)
+    stats_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Database Upsert Helpers (Zero Duplicate Key Violations)
+# ---------------------------------------------------------------------------
+def bulk_upsert_analyzed_problems(session: Session, records: list) -> int:
+    """Safely bulk insert problems with atomic ON CONFLICT DO NOTHING."""
+    if not records:
+        return 0
+    # Python-side deduplication guarantees no duplicate primary keys in parameter list
+    deduped: dict = {}
+    for r in records:
+        sha = r.get("file_sha256")
+        if sha:
+            deduped[sha] = r
+
+    if not deduped:
+        return 0
+
+    values = list(deduped.values())
+    dialect_name = engine.dialect.name
+
+    if dialect_name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        stmt = pg_insert(AnalyzedProblem).values(values).on_conflict_do_nothing(index_elements=["file_sha256"])
+        session.execute(stmt)
+    elif dialect_name == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+        stmt = sqlite_insert(AnalyzedProblem).values(values).on_conflict_do_nothing(index_elements=["file_sha256"])
+        session.execute(stmt)
+    else:
+        for val in values:
+            session.merge(AnalyzedProblem(**val))
+    return len(values)
+
+
+def bulk_upsert_analyzed_commits(session: Session, records: list) -> int:
+    """Safely bulk insert commits with atomic ON CONFLICT DO NOTHING."""
+    if not records:
+        return 0
+    deduped: dict = {}
+    for r in records:
+        h = r.get("commit_hash")
+        if h:
+            deduped[h] = r
+
+    if not deduped:
+        return 0
+
+    values = list(deduped.values())
+    dialect_name = engine.dialect.name
+
+    if dialect_name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        stmt = pg_insert(AnalyzedCommit).values(values).on_conflict_do_nothing(index_elements=["commit_hash"])
+        session.execute(stmt)
+    elif dialect_name == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+        stmt = sqlite_insert(AnalyzedCommit).values(values).on_conflict_do_nothing(index_elements=["commit_hash"])
+        session.execute(stmt)
+    else:
+        for val in values:
+            session.merge(AnalyzedCommit(**val))
+    return len(values)
+
+
 # ---------------------------------------------------------------------------
 # Session Helper & Context Manager
 # ---------------------------------------------------------------------------

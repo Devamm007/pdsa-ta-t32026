@@ -58,7 +58,10 @@ function switchTab(tabId) {
     }
 
     if (tabId === 'leaderboard') loadLeaderboard();
-    if (tabId === 'submit') checkMySyncedRepo();
+    if (tabId === 'submit') {
+        checkMySyncedRepo();
+        checkActiveUserJob();
+    }
 }
 
 function initMobileNav() {
@@ -263,6 +266,7 @@ function renderUserSession() {
     }
 
     checkMySyncedRepo();
+    checkActiveUserJob();
 }
 
 // Logout handler
@@ -758,7 +762,174 @@ document.getElementById('refresh-leaderboard-btn')?.addEventListener('click', ()
 });
 
 // --------------------------------------------------------------------------
-// Repo Submission Handler
+// Background Analysis Job Polling & UI Renderers
+// --------------------------------------------------------------------------
+let currentJobPollInterval = null;
+
+function renderJobProgress(stage, percent, repoUrl) {
+    const resultCard = document.getElementById('submit-result-card');
+    if (!resultCard) return;
+    const cleanName = repoUrl ? repoUrl.replace('https://github.com/', '') : 'Repository';
+    resultCard.className = 'result-card processing';
+    resultCard.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+            <h4 style="color:var(--accent-cyan); display:flex; align-items:center; gap:8px;">
+                <i class="fa-solid fa-circle-notch fa-spin"></i> Background Deep Analysis
+            </h4>
+            <span style="font-family:var(--font-mono); font-size:0.82rem; font-weight:700; color:var(--accent-cyan);">${percent}%</span>
+        </div>
+        <p style="margin-top:6px; font-weight:600; font-size:0.86rem; color:var(--text-primary);">${escapeHtml(cleanName)}</p>
+        <div class="progress-track">
+            <div class="progress-fill" style="width:${Math.max(8, percent)}%;"></div>
+        </div>
+        <div class="progress-meta">
+            <span><i class="fa-solid fa-gear fa-spin" style="font-size:0.75rem; margin-right:4px;"></i> ${escapeHtml(stage || 'Processing in background...')}</span>
+            <span>Running on worker</span>
+        </div>
+    `;
+    resultCard.classList.remove('hidden');
+}
+
+function renderJobResult(stats) {
+    const resultCard = document.getElementById('submit-result-card');
+    if (!resultCard) return;
+    resultCard.className = 'result-card';
+    resultCard.innerHTML = `
+        <h4><i class="fa-solid fa-circle-check" style="color:var(--accent-emerald);"></i> Analysis Complete!</h4>
+        <p style="margin-top:6px; font-weight:600;">${escapeHtml(stats.name)}</p>
+        <div class="result-stats-grid">
+            <div class="result-stat">
+                <div class="result-stat-val">${stats.score.toFixed(2)}</div>
+                <div class="result-stat-lbl">Holistic Score</div>
+            </div>
+            <div class="result-stat">
+                <div class="result-stat-val">${stats.problems}</div>
+                <div class="result-stat-lbl">Problems</div>
+            </div>
+            <div class="result-stat">
+                <div class="result-stat-val">${stats.active_days}</div>
+                <div class="result-stat-lbl">Active Days</div>
+            </div>
+        </div>
+        <div style="display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;">
+            <span class="badge-easy">${stats.easy_count} Easy</span>
+            <span class="badge-medium">${stats.medium_count} Medium</span>
+            <span class="badge-hard">${stats.hard_count} Hard</span>
+        </div>
+        <p style="margin-top:8px; font-size:0.8rem; color:var(--text-muted);">
+            <i class="fa-solid fa-globe"></i> ${escapeHtml(stats.languages)} &nbsp;|&nbsp;
+            <i class="fa-solid fa-tags"></i> ${escapeHtml(stats.topics_covered)}
+        </p>
+    `;
+    resultCard.classList.remove('hidden');
+}
+
+function renderJobError(errMsg) {
+    const resultCard = document.getElementById('submit-result-card');
+    if (!resultCard) return;
+    resultCard.className = 'result-card error';
+    resultCard.innerHTML = `
+        <h4><i class="fa-solid fa-triangle-exclamation" style="color:var(--accent-rose);"></i> Analysis Failed</h4>
+        <p style="margin-top:4px;">${escapeHtml(errMsg || 'An error occurred during repository analysis.')}</p>
+    `;
+    resultCard.classList.remove('hidden');
+}
+
+function setSubmitButtonState(isBusy) {
+    const submitBtn = document.getElementById('submit-btn');
+    if (!submitBtn) return;
+    const btnText = submitBtn.querySelector('.btn-text');
+    const btnLoader = submitBtn.querySelector('.btn-loader');
+    submitBtn.disabled = isBusy;
+    if (isBusy) {
+        btnText?.classList.add('hidden');
+        btnLoader?.classList.remove('hidden');
+    } else {
+        btnText?.classList.remove('hidden');
+        btnLoader?.classList.add('hidden');
+    }
+}
+
+async function pollAnalysisJob(jobId, repoUrl) {
+    if (currentJobPollInterval) {
+        clearInterval(currentJobPollInterval);
+        currentJobPollInterval = null;
+    }
+
+    setSubmitButtonState(true);
+    renderJobProgress('Analyzing repository in background...', 15, repoUrl);
+
+    let attempts = 0;
+    const maxAttempts = 150; // 150 * 2s = 5 minutes polling max
+
+    currentJobPollInterval = setInterval(async () => {
+        attempts++;
+        try {
+            const res = await fetch(`/api/jobs/${jobId}`);
+            if (!res.ok) {
+                if (attempts >= maxAttempts) {
+                    clearInterval(currentJobPollInterval);
+                    currentJobPollInterval = null;
+                    setSubmitButtonState(false);
+                    renderJobError('Polling timed out. The analysis is continuing on the server; please refresh in a moment.');
+                }
+                return;
+            }
+
+            const data = await res.json();
+            if (data.status === 'completed') {
+                clearInterval(currentJobPollInterval);
+                currentJobPollInterval = null;
+                setSubmitButtonState(false);
+                showToast('Holistic analysis complete!');
+                renderJobResult(data.stats);
+                const input = document.getElementById('repo-url-input');
+                if (input) input.value = '';
+                loadLeaderboard();
+                checkMySyncedRepo();
+            } else if (data.status === 'failed') {
+                clearInterval(currentJobPollInterval);
+                currentJobPollInterval = null;
+                setSubmitButtonState(false);
+                const errMsg = data.error || 'Repository analysis failed.';
+                renderJobError(errMsg);
+                showToast(errMsg, true);
+            } else {
+                // queued or analyzing
+                const percent = Math.min(95, Math.max(10, data.progress_percent || 15));
+                const stage = data.progress_stage || 'Processing repository in background...';
+                renderJobProgress(stage, percent, data.repo_url || repoUrl);
+            }
+        } catch (e) {
+            console.warn('Job poll error:', e);
+        }
+
+        if (attempts >= maxAttempts) {
+            clearInterval(currentJobPollInterval);
+            currentJobPollInterval = null;
+            setSubmitButtonState(false);
+        }
+    }, 2000);
+}
+
+async function checkActiveUserJob() {
+    if (!state.user || !state.token) return;
+    try {
+        const res = await fetch('/api/user/active-job', {
+            headers: { 'Authorization': `Bearer ${state.token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.has_active_job && data.job) {
+            pollAnalysisJob(data.job.job_id, data.job.repo_url);
+        }
+    } catch (e) {
+        console.warn('Active job check warning:', e);
+    }
+}
+
+// --------------------------------------------------------------------------
+// Repo Submission Handler & Event Listeners
 // --------------------------------------------------------------------------
 function initEventListeners() {
     const submitForm = document.getElementById('repo-submit-form');
@@ -772,21 +943,14 @@ function initEventListeners() {
 
             const input = document.getElementById('repo-url-input');
             const repoUrl = input.value.trim();
-            const submitBtn = document.getElementById('submit-btn');
-            const resultCard = document.getElementById('submit-result-card');
 
             if (!repoUrl.startsWith('https://github.com/')) {
                 showToast('Please enter a valid GitHub repository URL', true);
                 return;
             }
 
-            const btnText = submitBtn.querySelector('.btn-text');
-            const btnLoader = submitBtn.querySelector('.btn-loader');
-
-            submitBtn.disabled = true;
-            btnText.classList.add('hidden');
-            btnLoader.classList.remove('hidden');
-            resultCard.classList.add('hidden');
+            setSubmitButtonState(true);
+            renderJobProgress('Connecting to worker & queueing analysis...', 10, repoUrl);
 
             try {
                 const res = await fetch('/api/submit', {
@@ -799,58 +963,20 @@ function initEventListeners() {
                 });
 
                 const data = await res.json();
-                if (res.ok && data.success) {
-                    showToast(data.message);
-                    const stats = data.stats;
-                    resultCard.className = 'result-card';
-                    resultCard.innerHTML = `
-                        <h4><i class="fa-solid fa-circle-check" style="color:var(--accent-emerald);"></i> Analysis Complete!</h4>
-                        <p style="margin-top:6px; font-weight:600;">${escapeHtml(stats.name)}</p>
-                        <div class="result-stats-grid">
-                            <div class="result-stat">
-                                <div class="result-stat-val">${stats.score.toFixed(2)}</div>
-                                <div class="result-stat-lbl">Holistic Score</div>
-                            </div>
-                            <div class="result-stat">
-                                <div class="result-stat-val">${stats.problems}</div>
-                                <div class="result-stat-lbl">Problems</div>
-                            </div>
-                            <div class="result-stat">
-                                <div class="result-stat-val">${stats.active_days}</div>
-                                <div class="result-stat-lbl">Active Days</div>
-                            </div>
-                        </div>
-                        <div style="display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;">
-                            <span class="badge-easy">${stats.easy_count} Easy</span>
-                            <span class="badge-medium">${stats.medium_count} Medium</span>
-                            <span class="badge-hard">${stats.hard_count} Hard</span>
-                        </div>
-                        <p style="margin-top:8px; font-size:0.8rem; color:var(--text-muted);">
-                            <i class="fa-solid fa-globe"></i> ${escapeHtml(stats.languages)} &nbsp;|&nbsp;
-                            <i class="fa-solid fa-tags"></i> ${escapeHtml(stats.topics_covered)}
-                        </p>
-                    `;
-                    resultCard.classList.remove('hidden');
-                    input.value = '';
-                    loadLeaderboard();
-                    checkMySyncedRepo();
+                if (res.ok && data.success && data.job_id) {
+                    showToast(data.message || 'Analysis queued in background!');
+                    pollAnalysisJob(data.job_id, repoUrl);
                 } else {
-                    const errMsg = data.detail || 'Could not analyze repository. Check that the repository is public.';
-                    resultCard.className = 'result-card error';
-                    resultCard.innerHTML = `
-                        <h4><i class="fa-solid fa-triangle-exclamation" style="color:var(--accent-rose);"></i> Analysis Failed</h4>
-                        <p style="margin-top:4px;">${escapeHtml(errMsg)}</p>
-                    `;
-                    resultCard.classList.remove('hidden');
+                    setSubmitButtonState(false);
+                    const errMsg = data.detail || 'Could not queue repository for analysis.';
+                    renderJobError(errMsg);
                     showToast(errMsg, true);
                 }
             } catch (err) {
                 console.error('Submit error:', err);
+                setSubmitButtonState(false);
+                renderJobError('Network error connecting to analysis server.');
                 showToast('Network error while analyzing repository. Please try again.', true);
-            } finally {
-                submitBtn.disabled = false;
-                btnText.classList.remove('hidden');
-                btnLoader.classList.add('hidden');
             }
         });
     }
@@ -864,7 +990,7 @@ function initEventListeners() {
         const btn = document.getElementById('admin-trigger-refresh-btn');
         btn.disabled = true;
         btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Refreshing All...`;
-        showToast('Incremental refresh started for all repos...');
+        showToast('Incremental refresh started in background for all repositories...');
 
         try {
             const res = await fetch('/api/admin/trigger-refresh', {
@@ -877,13 +1003,15 @@ function initEventListeners() {
                 loadLeaderboard();
                 initScheduleTimer();
             } else {
-                showToast(data.detail || 'Failed to refresh repos', true);
+                showToast(data.detail || 'Failed to trigger refresh', true);
             }
         } catch (e) {
-            showToast('Network error during manual refresh', true);
+            showToast('Network error during refresh trigger', true);
         } finally {
-            btn.disabled = false;
-            btn.innerHTML = `<i class="fa-solid fa-bolt"></i> Run Refresh Now`;
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-bolt"></i> Run Refresh Now`;
+            }, 3000);
         }
     });
 }

@@ -7,11 +7,12 @@ import hmac
 import base64
 import hashlib
 import asyncio
+import uuid
 import logging
 import subprocess
 import tempfile
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Dict, Any, Set, Tuple
+from typing import Optional, List, Dict, Any, Set, Tuple, Callable
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -31,6 +32,7 @@ load_dotenv()
 # Import SQLAlchemy Models, Database Session, Init & Engine Info
 from database import (
     get_db, init_db, User, Submission, UserNote, AnalyzedCommit, AnalyzedProblem,
+    AnalysisJob, bulk_upsert_analyzed_problems, bulk_upsert_analyzed_commits,
     DB_BACKEND, IS_PRODUCTION
 )
 
@@ -437,307 +439,559 @@ def classify_problem_with_heuristics(code_text: str, slug: str, file_path_str: s
         "analysis_source": "heuristic"
     }
 
-def get_or_classify_problem_info(file_path: str, slug: str, session: Session) -> Dict[str, str]:
-    """Retrieve problem analysis from SQLAlchemy / Neon cache or run repo-agnostic classifier."""
-    file_sha = compute_file_sha256(file_path)
+# ---------------------------------------------------------------------------
+# DSA Candidate Identification & Filtering
+# ---------------------------------------------------------------------------
+KNOWN_NON_DSA_FILENAMES = {
+    "main", "app", "server", "index", "setup", "test", "tests", "conftest",
+    "manage", "wsgi", "asgi", "config", "settings", "routes", "views", "models",
+    "client", "cli", "worker", "tasks", "helpers", "utils", "common", "constants",
+    "train", "training", "model", "dataset", "dataloader", "evaluate", "eval",
+    "inference", "gpt", "transformer", "bert", "tokenizer", "loss", "optimizer",
+    "checkpoint", "vite.config", "webpack.config", "next.config", "tailwind.config",
+    "postcss.config", "babel.config", "playwright.config", "jest.config", "package",
+    "package-lock", "tsconfig", "env", "environment", "build", "run", "start",
+    "types", "interfaces", "theme", "store", "middleware", "auth"
+}
 
-    # 1. Check database cache
-    cached = session.query(AnalyzedProblem).filter(AnalyzedProblem.file_sha256 == file_sha).first()
-    if cached:
-        return {
-            "problem_slug": cached.problem_slug,
-            "problem_name": cached.problem_name,
-            "difficulty": cached.difficulty,
-            "topic": cached.topic,
-            "time_complexity": cached.time_complexity,
-            "space_complexity": cached.space_complexity,
-            "analysis_source": cached.analysis_source
-        }
+KNOWN_DSA_DIR_KEYWORDS = {
+    "leetcode", "neetcode", "blind75", "striver", "problems", "solutions",
+    "algorithms", "algo", "data-structures", "data_structures", "dsa",
+    "codeforces", "hackerrank", "competitive-programming", "cp", "gfg",
+    "geeksforgeeks", "codewars", "interview-prep", "interview"
+}
 
-    # 2. Check canonical catalogue
-    if slug in PROBLEM_CATALOG:
-        diff, top = PROBLEM_CATALOG[slug]
-        info = {
-            "problem_slug": slug,
-            "problem_name": slug.replace("-", " ").title(),
-            "difficulty": diff,
-            "topic": top,
-            "time_complexity": "O(N)" if diff == "Easy" else ("O(N log N)" if diff == "Medium" else "O(N^2)"),
-            "space_complexity": "O(1)" if diff == "Easy" else "O(N)",
-            "analysis_source": "catalog"
-        }
-    else:
-        # 3. Run repo-agnostic code analysis
+DSA_SIGNATURE_KEYWORDS = [
+    "class solution", "def twosum", "listnode", "treenode", "leetcode.com",
+    "neetcode.io", "# leetcode", "// leetcode", "class minstack", "class lrucache",
+    "#include <bits/stdc++.h>", "ios_base::sync_with_stdio", "time complexity:",
+    "space complexity:", "constraints:"
+]
+
+CONTAINER_DIRS = {
+    "leetcode", "neetcode", "blind75", "striver", "problems", "solutions",
+    "algorithms", "algo", "data-structures", "data_structures", "dsa",
+    "codeforces", "hackerrank", "competitive-programming", "cp", "gfg",
+    "geeksforgeeks", "codewars", "interview-prep", "interview", "easy",
+    "medium", "hard", "src", "cpp", "python", "java", "javascript", "go",
+    "rust", "csharp", "ts", "daily", "sub", "submissions", "code", "contest",
+    "scripts", "script", "tools", "tool", "utils", "util", "helpers", "helper",
+    "lib", "bin", "core", "app", "common", "pkg", "cmd", "tests", "test",
+    "examples", "example", "demos", "demo", "models", "model", "datasets",
+    "dataset", "configs", "config", "docs", "doc", "static", "public"
+}
+
+def is_dsa_candidate(
+    file_path: str,
+    stem: str,
+    parent_dir: str,
+    ext: str,
+    repo_root_name: str = ""
+) -> Tuple[bool, str]:
+    """
+    Platform-agnostic problem slug resolver.
+    Handles:
+    - Directory-per-problem (LeetHub, LeetCode Sync, NeetCode, CP, Striver)
+    - Flat problem files
+    - Multi-language polyglot solutions
+    - Timestamped and runtime-tagged submission files
+    Returns (is_dsa, normalized_problem_slug).
+    """
+BUILD_AND_TOOL_PREFIXES = (
+    "audit", "build", "compile", "gen", "lint", "test", "spec", "parse",
+    "make", "check", "clean", "split", "deploy", "export", "import", "voice",
+    "trace", "rep", "vl"
+)
+
+def is_dsa_candidate(
+    file_path: str,
+    stem: str,
+    parent_dir: str,
+    ext: str,
+    repo_root_name: str = ""
+) -> Tuple[bool, str]:
+    """
+    Platform-agnostic problem slug resolver.
+    Strictly distinguishes genuine DSA problem solving solutions from:
+    - Educational documentation / textbooks (e.g. dsa-docs)
+    - Build, audit, generator, and tooling scripts
+    - Machine learning, web, and generic software projects
+    Returns (is_dsa, normalized_problem_slug).
+    """
+    stem_lower = stem.lower()
+    parent_lower = parent_dir.lower()
+    repo_root_lower = repo_root_name.lower()
+
+    # Reject obvious build, audit, tool, and generic scripts unless in problem catalog
+    is_tool_script = (
+        stem_lower in KNOWN_NON_DSA_FILENAMES
+        or any(stem_lower.startswith(p) for p in BUILD_AND_TOOL_PREFIXES)
+        or any(stem_lower.endswith(p) for p in ["check", "lint", "test", "spec", "audit"])
+    )
+    if is_tool_script and stem_lower not in PROBLEM_CATALOG:
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                code_text = f.read(5000)
+                head_text = f.read(2048).lower()
+            if not any(k in head_text for k in ["class solution", "listnode", "treenode", "leetcode.com/problems"]):
+                return (False, "")
         except Exception:
-            code_text = ""
-        info = classify_problem_with_heuristics(code_text, slug, file_path)
+            return (False, "")
 
-    # Cache into Neon DB / SQLAlchemy
-    new_prob = AnalyzedProblem(
-        file_sha256=file_sha,
-        problem_slug=info["problem_slug"],
-        problem_name=info["problem_name"],
-        difficulty=info["difficulty"],
-        topic=info["topic"],
-        time_complexity=info["time_complexity"],
-        space_complexity=info["space_complexity"],
-        analysis_source=info["analysis_source"]
+    is_parent_container = (
+        not parent_dir
+        or parent_lower == repo_root_lower
+        or parent_lower in CONTAINER_DIRS
+        or parent_lower.startswith("sub")
+        or any(parent_lower.startswith(p) for p in ["script", "tool", "asset", "input", "output", "doc", "skill", "trace"])
     )
-    session.merge(new_prob)
-    return info
+
+    # 1. Directory-per-problem:
+    # A directory is a genuine problem directory if:
+    # - It matches the LeetCode Problem Catalog / Aliases (e.g. "two-sum", "reverse-linked-list")
+    # - OR it has a standard numeric LeetCode prefix (e.g. "1-two-sum", "0001-two-sum", "100-same-tree")
+    # - OR it starts with "lc-", "p-", "problem-" followed by a number
+    if not is_parent_container and len(parent_dir) >= 2:
+        norm_parent = normalize_slug(parent_dir)
+        if (
+            norm_parent in PROBLEM_CATALOG
+            or norm_parent in CANONICAL_ALIASES
+            or re.match(r"^\d+[\-_.]+", parent_dir)
+            or re.match(r"^(?:lc|p|problem)[-_]?\d+", parent_dir, re.IGNORECASE)
+        ):
+            return (True, norm_parent)
+
+    # 2. Flat repository structure:
+    # The file stem itself defines the problem
+    direct_slug = normalize_slug(stem)
+    if direct_slug in PROBLEM_CATALOG or direct_slug in CANONICAL_ALIASES:
+        return (True, CANONICAL_ALIASES.get(direct_slug, direct_slug))
+
+    # Check numerical LeetCode pattern on stem (e.g. "0001-two-sum", "1. Two Sum")
+    # Exclude timestamp strings (e.g. "2024-01-09 13.20.47...")
+    is_timestamp = bool(re.match(r"^\d{4}-\d{2}-\d{2}", stem))
+    if not is_timestamp:
+        m_num = re.match(r"^(\d{1,4})[-_.]+(.+)$", stem)
+        if m_num:
+            num_slug = normalize_slug(m_num.group(2))
+            if len(num_slug) >= 2 and num_slug not in KNOWN_NON_DSA_FILENAMES:
+                return (True, num_slug)
+
+        m_lc = re.match(r"^(?:lc|problem|p)[-_]?(\d{1,4})[-_.]*(.*)$", stem, re.IGNORECASE)
+        if m_lc:
+            lc_name = normalize_slug(m_lc.group(2))
+            return (True, lc_name or f"leetcode-{m_lc.group(1)}")
+
+    # 3. Content signature check (class Solution, TreeNode, ListNode, LeetCode headers)
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            code_sample = f.read(3000).lower()
+        if any(sig in code_sample for sig in DSA_SIGNATURE_KEYWORDS):
+            slug_to_use = normalize_slug(parent_dir) if not is_parent_container else direct_slug
+            if not re.match(r"^\d{4}-\d{2}-\d{2}", slug_to_use) and len(slug_to_use) >= 2:
+                return (True, slug_to_use or "dsa-solution")
+    except Exception:
+        pass
+
+    # If none of the above match, it is not a DSA problem solution
+    return (False, "")
+
+# ---------------------------------------------------------------------------
+# Directories and Files Excluded from Recursive Code Scans (Prevents Hangs)
+# ---------------------------------------------------------------------------
+IGNORED_SCAN_DIRS = {
+    ".git", "node_modules", "vendor", ".venv", "venv", "env",
+    "__pycache__", "dist", "build", ".next", "target", ".gradle",
+    "site-packages", ".idea", ".vscode", "coverage", ".turbo",
+    "bin", "obj", "out", ".cargo", "Pods"
+}
 
 # ---------------------------------------------------------------------------
 # Holistic Incremental Repository Analyzer
 # ---------------------------------------------------------------------------
-def analyze_repo_holistic(repo_url: str) -> Dict[str, Any]:
+def analyze_repo_holistic(
+    repo_url: str,
+    progress_callback: Optional[Callable[[str, int], None]] = None
+) -> Dict[str, Any]:
     """
     Incremental Holistic Analysis:
-    1. Shallow-clones repo using secure git parameters and size limits.
-    2. Validates genuine code files, ignoring empty stubs, comments, and automated templates.
-    3. Analyzes git commit history with file associations.
-    4. Caches problem fingerprints in Neon DB via SQLAlchemy.
+    1. Shallow-clones repo using secure git parameters, depth limit, and timeouts.
+    2. Prunes vendor/build directories and validates genuine code files.
+    3. Analyzes git commit history with file associations (capped to prevent timeouts).
+    4. Caches problem fingerprints in Neon DB with zero duplicate key errors.
     5. Computes calibrated consistency score and problem difficulty points.
-    6. Ensures repos with zero code files receive 0 points and 0 solved problems.
+    6. Ensures all repos (big, small, DSA, and non-DSA general code) are evaluated safely.
     """
+    def _notify(stage: str, percent: int):
+        if progress_callback:
+            try:
+                progress_callback(stage, percent)
+            except Exception:
+                pass
+
     clean_url = sanitize_github_url(repo_url)
     if not clean_url:
         logger.warning(f"Rejected invalid repo URL: {repo_url}")
         raise ValueError("Invalid GitHub repository URL format. Example: https://github.com/username/repository")
 
     logger.info(f"Starting incremental holistic analysis for: {clean_url}")
+    _notify("Verifying cache & repository...", 10)
 
-    with get_db() as session:
-        # Query already-seen commits for this repo
-        seen_rows = session.query(AnalyzedCommit).filter(AnalyzedCommit.repo_url == clean_url).all()
-        seen_commits_db: Dict[str, Tuple[str, str]] = {r.commit_hash: (r.commit_date or "", r.commit_message or "") for r in seen_rows}
+    # Step 1: Query already-seen commits for this repo (quick, non-blocking DB query)
+    seen_commits_db: Set[str] = set()
+    try:
+        with get_db() as session:
+            seen_rows = session.query(AnalyzedCommit.commit_hash).filter(AnalyzedCommit.repo_url == clean_url).all()
+            seen_commits_db = {r[0] for r in seen_rows}
         logger.info(f"Loaded {len(seen_commits_db)} previously analyzed commits from cache for {clean_url}")
+    except Exception as e:
+        logger.warning(f"Could not load cached commits for {clean_url}: {e}")
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            try:
-                subprocess.run(
-                    ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.symlinks=false", "clone", "--depth", "50", "--single-branch", "--no-tags", clean_url, temp_dir],
-                    check=True,
-                    capture_output=True,
-                    timeout=45
-                )
-            except subprocess.TimeoutExpired:
-                logger.error(f"Clone timed out for {clean_url}")
-                raise RuntimeError("Repository clone timed out (45s). Please ensure the repository is public and accessible.")
-            except subprocess.CalledProcessError as e:
-                err_msg = e.stderr.decode('utf-8', errors='ignore') if e.stderr else "Git error"
-                logger.error(f"Git clone error for {clean_url}: {err_msg}")
-                raise RuntimeError("Failed to clone repository. Please check if the repository URL is public and valid.")
-
-            # Security check: Enforce maximum repository disk size (50 MB)
-            total_size = sum(
-                os.path.getsize(os.path.join(dirpath, filename))
-                for dirpath, _, filenames in os.walk(temp_dir)
-                for filename in filenames
+    # Step 2: Clone repository in a temporary directory
+    _notify("Cloning repository from GitHub (shallow clone)...", 20)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        try:
+            subprocess.run(
+                [
+                    "git",
+                    "-c", "core.hooksPath=/dev/null",
+                    "-c", "core.symlinks=false",
+                    "clone",
+                    "--depth", "50",
+                    "--single-branch",
+                    "--no-tags",
+                    clean_url,
+                    temp_dir
+                ],
+                check=True,
+                capture_output=True,
+                timeout=60
             )
-            if total_size > 50 * 1024 * 1024:
-                logger.warning(f"Repository {clean_url} exceeded 50MB size limit ({total_size} bytes). Rejected.")
-                raise RuntimeError("Repository size exceeds the 50 MB security limit for automated analysis.")
+        except subprocess.TimeoutExpired:
+            logger.error(f"Clone timed out for {clean_url}")
+            raise RuntimeError("Repository clone timed out (60s). Please ensure the repository is public and accessible.")
+        except subprocess.CalledProcessError as e:
+            err_msg = e.stderr.decode('utf-8', errors='ignore') if e.stderr else "Git error"
+            logger.error(f"Git clone error for {clean_url}: {err_msg}")
+            raise RuntimeError("Failed to clone repository. Please check if the repository URL is public and valid.")
 
-            # --- Phase 1: File Analysis with SQLAlchemy Cache & Strict Code Validation ---
-            detected_problems: Dict[str, Dict[str, Any]] = {}
-            detected_languages: Set[str] = set()
-            has_documentation = False
+        _notify("Scanning codebase & identifying genuine code files...", 40)
 
-            for root, dirs, files in os.walk(temp_dir):
-                if ".git" in root.split(os.sep):
-                    continue
+        # Step 3: Phase 1 - Scan code files with directory pruning & DSA candidate verification
+        candidates: List[Tuple[str, str, str, str]] = []  # (file_path, slug, lang, file_sha)
+        has_documentation = False
+        max_files_limit = 2500
+        scanned_count = 0
 
-                for f in files:
-                    ext = Path(f).suffix.lower()
-                    stem = Path(f).stem.lower()
-                    file_path = os.path.join(root, f)
+        repo_root_name = Path(temp_dir).name.lower()
 
-                    if ext in CODE_EXTENSIONS:
-                        if not is_genuine_code_file(file_path, ext):
-                            continue
+        for root, dirs, files in os.walk(temp_dir):
+            # Prune vendor, build, and hidden directories in-place to avoid hanging
+            dirs[:] = [d for d in dirs if d.lower() not in IGNORED_SCAN_DIRS and not d.startswith(".")]
+            # Prioritize directories that look like DSA folders first
+            dirs.sort(key=lambda d: 0 if any(kw in d.lower() for kw in KNOWN_DSA_DIR_KEYWORDS) else 1)
 
-                        lang = CODE_EXTENSIONS[ext]
-                        detected_languages.add(lang)
+            # Sort files so clean/accepted solutions come first before failed attempts
+            def _file_sort_key(filename: str) -> int:
+                fn = filename.lower()
+                if "accepted" in fn or fn.startswith("solution.") or "0001" in fn:
+                    return 0
+                if any(w in fn for w in ["wrong answer", "time limit", "compile error", "runtime error"]):
+                    return 2
+                return 1
+            files.sort(key=_file_sort_key)
 
-                        parent_dir = Path(root).name.lower()
-                        slug = ""
-                        if parent_dir and parent_dir != Path(temp_dir).name.lower() and not parent_dir.startswith("sub") and parent_dir != "data structures & algorithms":
-                            slug = normalize_slug(parent_dir)
-                        else:
-                            slug = normalize_slug(stem)
+            folder_seen_slug_langs: Set[Tuple[str, str]] = set()
 
-                        if slug and len(slug) >= 3:
-                            p_info = get_or_classify_problem_info(file_path, slug, session)
-                            if slug not in detected_problems:
-                                detected_problems[slug] = {
-                                    "slug": slug,
-                                    "name": p_info["problem_name"],
-                                    "difficulty": p_info["difficulty"],
-                                    "topic": p_info["topic"],
-                                    "time_complexity": p_info["time_complexity"],
-                                    "space_complexity": p_info["space_complexity"],
-                                    "source": p_info["analysis_source"],
-                                    "languages": set()
-                                }
-                            detected_problems[slug]["languages"].add(lang)
+            for f in files:
+                if scanned_count >= max_files_limit:
+                    break
 
-                    elif ext == ".md" and f.lower() not in {"license.md"}:
-                        has_documentation = True
+                ext = Path(f).suffix.lower()
+                stem = Path(f).stem.lower()
+                file_path = os.path.join(root, f)
 
-            # --- Phase 2: Git Commit Parsing with Code-File Associations ---
+                if ext in CODE_EXTENSIONS:
+                    if not is_genuine_code_file(file_path, ext):
+                        continue
+
+                    parent_dir = Path(root).name.lower()
+                    is_dsa, slug = is_dsa_candidate(file_path, stem, parent_dir, ext, repo_root_name)
+                    if not is_dsa:
+                        continue
+
+                    lang = CODE_EXTENSIONS[ext]
+                    # Collapse multiple identical language submissions for the same problem in the same folder
+                    slug_lang_key = (slug, lang)
+                    if slug_lang_key in folder_seen_slug_langs:
+                        continue
+                    folder_seen_slug_langs.add(slug_lang_key)
+
+                    try:
+                        file_sha = compute_file_sha256(file_path)
+                        candidates.append((file_path, slug, lang, file_sha))
+                        scanned_count += 1
+                    except Exception:
+                        continue
+
+                elif ext == ".md" and f.lower() not in {"license.md"}:
+                    has_documentation = True
+
+            if scanned_count >= max_files_limit:
+                logger.info(f"Reached safety file scan cap ({max_files_limit}) for {clean_url}")
+                break
+
+        _notify("Classifying problems & analyzing algorithmic complexity...", 60)
+
+        # Step 4: Batch lookup cached problems from database in a single query
+        unique_shas = {c[3] for c in candidates}
+        cached_problems_map: Dict[str, Dict[str, Any]] = {}
+
+        if unique_shas:
             try:
-                log_proc = subprocess.run(
-                    ["git", "-C", temp_dir, "log", "--pretty=format:COMMIT:%H|%ad|%s", "--name-only", "--date=short"],
-                    capture_output=True,
-                    text=True,
-                    timeout=15,
-                    check=True
-                )
+                with get_db() as session:
+                    sha_list = list(unique_shas)
+                    for i in range(0, len(sha_list), 500):
+                        chunk = sha_list[i:i + 500]
+                        rows = session.query(AnalyzedProblem).filter(AnalyzedProblem.file_sha256.in_(chunk)).all()
+                        for r in rows:
+                            cached_problems_map[r.file_sha256] = {
+                                "problem_slug": r.problem_slug,
+                                "problem_name": r.problem_name,
+                                "difficulty": r.difficulty,
+                                "topic": r.topic,
+                                "time_complexity": r.time_complexity,
+                                "space_complexity": r.space_complexity,
+                                "analysis_source": r.analysis_source
+                            }
             except Exception as e:
-                logger.error(f"Error reading git log for {clean_url}: {str(e)}")
-                raise RuntimeError("Failed to parse git commits from repository.")
+                logger.warning(f"Cache lookup failed for {clean_url}: {e}")
 
-            new_commits_to_insert = []
-            daily_code_days: Set[str] = set()
-            daily_problems_map: Dict[str, Set[str]] = {}
-            current_commit = None
+        # Step 5: Classify uncached code files with canonical catalog or heuristics
+        new_problems_to_save: Dict[str, Dict[str, Any]] = {}
+        detected_problems: Dict[str, Dict[str, Any]] = {}
+        detected_languages: Set[str] = set()
 
-            for line in log_proc.stdout.split("\n"):
-                line = line.strip()
-                if not line:
-                    continue
-                if line.startswith("COMMIT:"):
-                    parts = line[7:].split("|", 2)
-                    if len(parts) == 3:
-                        c_hash, c_date, c_msg = parts
-                        current_commit = (c_hash, c_date, c_msg)
-                        if c_hash not in seen_commits_db:
-                            new_commits_to_insert.append((c_hash, clean_url, c_date, c_msg))
-                elif current_commit:
-                    ext = Path(line).suffix.lower()
-                    if ext in CODE_EXTENSIONS:
-                        c_hash, c_date, c_msg = current_commit
-                        daily_code_days.add(c_date)
-                        if c_date not in daily_problems_map:
-                            daily_problems_map[c_date] = set()
-                        matched = None
-                        for s in detected_problems:
-                            if s in c_msg.lower() or s in line.lower() or s.replace("-", " ") in c_msg.lower():
-                                matched = s
-                                break
-                        if matched:
-                            daily_problems_map[c_date].add(matched)
-                        else:
-                            daily_problems_map[c_date].add(f"code_{len(daily_problems_map[c_date])}")
+        for file_path, slug, lang, file_sha in candidates:
+            detected_languages.add(lang)
 
-            # Insert new commits into database
-            for c_hash, c_url, c_date, c_msg in new_commits_to_insert:
-                session.merge(AnalyzedCommit(
-                    commit_hash=c_hash,
-                    repo_url=c_url,
-                    commit_date=c_date,
-                    commit_message=c_msg
-                ))
-            if new_commits_to_insert:
-                logger.info(f"Recorded {len(new_commits_to_insert)} new unique commits into cache for {clean_url}")
-
-            # --- Phase 3: Mathematical Holistic Ranking ---
-            total_unique = len(detected_problems)
-
-            if total_unique == 0:
-                final_score = 0.0
-                active_days = 0
-                easy_count = 0
-                medium_count = 0
-                hard_count = 0
-                consistency_base = 0.0
-                problem_difficulty_pts = 0.0
-                active_day_mult = 1.0
-                breadth_mult = 1.0
-                topic_mult = 1.0
-                doc_mult = 1.0
-                polyglot_mult = 1.0
-                problem_summary_list = []
-                topics_covered = set()
-                logger.warning(f"Repository {clean_url} has 0 verifiable DSA solutions. Evaluated score: 0.00")
+            if file_sha in cached_problems_map:
+                p_info = cached_problems_map[file_sha]
             else:
-                easy_count = sum(1 for p in detected_problems.values() if p["difficulty"] == "Easy")
-                medium_count = sum(1 for p in detected_problems.values() if p["difficulty"] == "Medium")
-                hard_count = sum(1 for p in detected_problems.values() if p["difficulty"] == "Hard")
+                if slug in PROBLEM_CATALOG:
+                    diff, top = PROBLEM_CATALOG[slug]
+                    p_info = {
+                        "problem_slug": slug,
+                        "problem_name": slug.replace("-", " ").title(),
+                        "difficulty": diff,
+                        "topic": top,
+                        "time_complexity": "O(N)" if diff == "Easy" else ("O(N log N)" if diff == "Medium" else "O(N^2)"),
+                        "space_complexity": "O(1)" if diff == "Easy" else "O(N)",
+                        "analysis_source": "catalog"
+                    }
+                else:
+                    try:
+                        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                            code_text = f.read(5000)
+                    except Exception:
+                        code_text = ""
+                    p_info = classify_problem_with_heuristics(code_text, slug, file_path)
 
-                problem_difficulty_pts = (easy_count * 1.0) + (medium_count * 2.5) + (hard_count * 5.0)
-
-                # Anti-burst consistency points: (Daily Pts)^0.72 capped at 25 pts/day
-                consistency_base = 0.0
-                for dt, pset in daily_problems_map.items():
-                    pts_day = 0.0
-                    for item in pset:
-                        if item in detected_problems:
-                            diff = detected_problems[item]["difficulty"]
-                            pts_day += 1.0 if diff == "Easy" else (2.5 if diff == "Medium" else 5.0)
-                        else:
-                            pts_day += 1.0
-                    pts_day = min(25.0, pts_day)
-                    consistency_base += math.pow(pts_day, 0.72)
-
-                active_days = max(1, len(daily_code_days))
-                active_day_mult = 1.0 + min(0.40, active_days * 0.03)
-                breadth_mult = 1.0 + min(0.30, total_unique * 0.015)
-                doc_mult = 1.04 if has_documentation else 1.00
-                polyglot_mult = 1.05 if len(detected_languages) > 1 else 1.00
-
-                topics_covered = {p["topic"] for p in detected_problems.values()}
-                topic_mult = 1.06 if len(topics_covered) >= 3 else 1.00
-
-                raw_composite = (0.50 * consistency_base * active_day_mult) + (0.50 * problem_difficulty_pts)
-                final_score = round(raw_composite * breadth_mult * doc_mult * polyglot_mult * topic_mult, 2)
-
-                problem_summary_list = []
-                for p in detected_problems.values():
-                    problem_summary_list.append({
-                        "slug": p["slug"],
-                        "name": p["name"],
-                        "difficulty": p["difficulty"],
-                        "topic": p["topic"],
-                        "time_complexity": p["time_complexity"],
-                        "space_complexity": p["space_complexity"],
-                        "source": p["source"],
-                        "languages": list(p["languages"])
-                    })
-
-            repo_name = "/".join(clean_url.split("/")[-2:])
-            result = {
-                "name": repo_name,
-                "clean_url": clean_url,
-                "score": final_score,
-                "problems": total_unique,
-                "active_days": active_days,
-                "easy_count": easy_count,
-                "medium_count": medium_count,
-                "hard_count": hard_count,
-                "languages": ", ".join(sorted(detected_languages)) or "None",
-                "topics_covered": ", ".join(sorted(topics_covered)) or "None",
-                "breakdown": {
-                    "no_code_detected": bool(total_unique == 0),
-                    "consistency_score": round(consistency_base, 2),
-                    "raw_difficulty_points": round(problem_difficulty_pts, 2),
-                    "active_days": active_days,
-                    "multipliers": {
-                        "active_day_multiplier": round(active_day_mult, 2),
-                        "breadth_multiplier": round(breadth_mult, 2),
-                        "topic_bonus": topic_mult,
-                        "doc_bonus": doc_mult,
-                        "polyglot_bonus": polyglot_mult
-                    },
-                    "problem_sample": problem_summary_list[:20]
+                cached_problems_map[file_sha] = p_info
+                # Deduplicate by file_sha256 in memory before saving
+                new_problems_to_save[file_sha] = {
+                    "file_sha256": file_sha,
+                    "problem_slug": p_info["problem_slug"],
+                    "problem_name": p_info["problem_name"],
+                    "difficulty": p_info["difficulty"],
+                    "topic": p_info["topic"],
+                    "time_complexity": p_info["time_complexity"],
+                    "space_complexity": p_info["space_complexity"],
+                    "analysis_source": p_info["analysis_source"],
+                    "created_at": datetime.utcnow()
                 }
-            }
-            logger.info(f"Incremental analysis complete for {clean_url}: Score={final_score}, Unique={total_unique}")
-            return result
 
+            if slug not in detected_problems:
+                detected_problems[slug] = {
+                    "slug": slug,
+                    "name": p_info["problem_name"],
+                    "difficulty": p_info["difficulty"],
+                    "topic": p_info["topic"],
+                    "time_complexity": p_info["time_complexity"],
+                    "space_complexity": p_info["space_complexity"],
+                    "source": p_info["analysis_source"],
+                    "languages": set()
+                }
+            detected_problems[slug]["languages"].add(lang)
+
+        _notify("Parsing git commits & timeline activity...", 75)
+
+        # Step 6: Phase 2 - Git Commit Parsing (capped to recent 200 commits for speed)
+        try:
+            log_proc = subprocess.run(
+                ["git", "-C", temp_dir, "log", "-n", "200", "--pretty=format:COMMIT:%H|%ad|%s", "--name-only", "--date=short"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=True
+            )
+        except Exception as e:
+            logger.error(f"Error reading git log for {clean_url}: {str(e)}")
+            raise RuntimeError("Failed to parse git commits from repository.")
+
+        new_commits_to_save: Dict[str, Dict[str, Any]] = {}
+        daily_code_days: Set[str] = set()
+        daily_problems_map: Dict[str, Set[str]] = {}
+        current_commit = None
+        slug_keys = list(detected_problems.keys())
+
+        for line in log_proc.stdout.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("COMMIT:"):
+                parts = line[7:].split("|", 2)
+                if len(parts) == 3:
+                    c_hash, c_date, c_msg = parts
+                    current_commit = (c_hash, c_date, c_msg)
+                    if c_hash not in seen_commits_db:
+                        new_commits_to_save[c_hash] = {
+                            "commit_hash": c_hash,
+                            "repo_url": clean_url,
+                            "commit_date": c_date,
+                            "commit_message": c_msg,
+                            "created_at": datetime.utcnow()
+                        }
+            elif current_commit:
+                ext = Path(line).suffix.lower()
+                if ext in CODE_EXTENSIONS:
+                    c_hash, c_date, c_msg = current_commit
+                    daily_code_days.add(c_date)
+                    if c_date not in daily_problems_map:
+                        daily_problems_map[c_date] = set()
+
+                    matched = None
+                    c_msg_lower = c_msg.lower()
+                    line_lower = line.lower()
+                    for s in slug_keys:
+                        if s in c_msg_lower or s in line_lower or s.replace("-", " ") in c_msg_lower:
+                            matched = s
+                            break
+
+                    if matched:
+                        daily_problems_map[c_date].add(matched)
+                    else:
+                        daily_problems_map[c_date].add(f"code_{len(daily_problems_map[c_date])}")
+
+        _notify("Computing calibrated holistic rank scores...", 85)
+
+        # Step 7: Phase 3 - Mathematical Holistic Ranking
+        total_unique = len(detected_problems)
+
+        if total_unique == 0:
+            final_score = 0.0
+            active_days = max(1, len(daily_code_days)) if daily_code_days else 0
+            easy_count = 0
+            medium_count = 0
+            hard_count = 0
+            consistency_base = 0.0
+            problem_difficulty_pts = 0.0
+            active_day_mult = 1.0
+            breadth_mult = 1.0
+            topic_mult = 1.0
+            doc_mult = 1.04 if has_documentation else 1.00
+            polyglot_mult = 1.00
+            problem_summary_list = []
+            topics_covered = set()
+            logger.info(f"Repository {clean_url} evaluated: 0 code solution files detected. Score: 0.00")
+        else:
+            easy_count = sum(1 for p in detected_problems.values() if p["difficulty"] == "Easy")
+            medium_count = sum(1 for p in detected_problems.values() if p["difficulty"] == "Medium")
+            hard_count = sum(1 for p in detected_problems.values() if p["difficulty"] == "Hard")
+
+            problem_difficulty_pts = (easy_count * 1.0) + (medium_count * 2.5) + (hard_count * 5.0)
+
+            # Anti-burst consistency points: (Daily Pts)^0.72 capped at 25 pts/day
+            consistency_base = 0.0
+            for dt, pset in daily_problems_map.items():
+                pts_day = 0.0
+                for item in pset:
+                    if item in detected_problems:
+                        diff = detected_problems[item]["difficulty"]
+                        pts_day += 1.0 if diff == "Easy" else (2.5 if diff == "Medium" else 5.0)
+                    else:
+                        pts_day += 1.0
+                pts_day = min(25.0, pts_day)
+                consistency_base += math.pow(pts_day, 0.72)
+
+            active_days = max(1, len(daily_code_days))
+            active_day_mult = 1.0 + min(0.40, active_days * 0.03)
+            breadth_mult = 1.0 + min(0.30, total_unique * 0.015)
+            doc_mult = 1.04 if has_documentation else 1.00
+            polyglot_mult = 1.05 if len(detected_languages) > 1 else 1.00
+
+            topics_covered = {p["topic"] for p in detected_problems.values()}
+            topic_mult = 1.06 if len(topics_covered) >= 3 else 1.00
+
+            raw_composite = (0.50 * consistency_base * active_day_mult) + (0.50 * problem_difficulty_pts)
+            final_score = round(raw_composite * breadth_mult * doc_mult * polyglot_mult * topic_mult, 2)
+
+            problem_summary_list = []
+            for p in detected_problems.values():
+                problem_summary_list.append({
+                    "slug": p["slug"],
+                    "name": p["name"],
+                    "difficulty": p["difficulty"],
+                    "topic": p["topic"],
+                    "time_complexity": p["time_complexity"],
+                    "space_complexity": p["space_complexity"],
+                    "source": p["source"],
+                    "languages": list(p["languages"])
+                })
+
+        _notify("Persisting problem fingerprints & cache to database...", 95)
+
+        # Step 8: Phase 4 - Fast Atomic Database Upsert (<20ms)
+        try:
+            with get_db() as session:
+                if new_problems_to_save:
+                    bulk_upsert_analyzed_problems(session, list(new_problems_to_save.values()))
+                if new_commits_to_save:
+                    bulk_upsert_analyzed_commits(session, list(new_commits_to_save.values()))
+            if new_commits_to_save:
+                logger.info(f"Recorded {len(new_commits_to_save)} new unique commits into cache for {clean_url}")
+        except Exception as e:
+            logger.error(f"Error persisting problems/commits cache for {clean_url}: {e}")
+
+        repo_name = "/".join(clean_url.split("/")[-2:])
+        result = {
+            "name": repo_name,
+            "clean_url": clean_url,
+            "score": final_score,
+            "problems": total_unique,
+            "active_days": active_days,
+            "easy_count": easy_count,
+            "medium_count": medium_count,
+            "hard_count": hard_count,
+            "languages": ", ".join(sorted(detected_languages)) or "None",
+            "topics_covered": ", ".join(sorted(topics_covered)) or "None",
+            "breakdown": {
+                "no_code_detected": bool(total_unique == 0),
+                "consistency_score": round(consistency_base, 2),
+                "raw_difficulty_points": round(problem_difficulty_pts, 2),
+                "active_days": active_days,
+                "multipliers": {
+                    "active_day_multiplier": round(active_day_mult, 2),
+                    "breadth_multiplier": round(breadth_mult, 2),
+                    "topic_bonus": topic_mult,
+                    "doc_bonus": doc_mult,
+                    "polyglot_bonus": polyglot_mult
+                },
+                "problem_sample": problem_summary_list[:20]
+            }
+        }
+        logger.info(f"Incremental analysis complete for {clean_url}: Score={final_score}, Unique={total_unique}")
+        _notify("Analysis complete!", 100)
+        return result
 # ---------------------------------------------------------------------------
 # 24-Hour Scheduled Background Worker (GMT +5:30 at 7:00 PM)
 # ---------------------------------------------------------------------------
@@ -919,17 +1173,125 @@ async def get_schedule_status():
         "minutes_remaining": int((diff_secs % 3600) // 60)
     }
 
+# ---------------------------------------------------------------------------
+# Background Analysis Job Worker & In-Memory Registry
+# ---------------------------------------------------------------------------
+ACTIVE_JOBS: Dict[str, Dict[str, Any]] = {}
+
+async def run_analysis_job(job_id: str, repo_url: str, user_email: str, user_name: str):
+    """Asynchronous background worker executing full repository analysis with live progress."""
+    logger.info(f"[Job {job_id}] Started background analysis worker for {repo_url} ({user_email})")
+
+    def _on_progress(stage: str, percent: int):
+        now_iso = datetime.utcnow().isoformat()
+        if job_id in ACTIVE_JOBS:
+            ACTIVE_JOBS[job_id]["status"] = "analyzing"
+            ACTIVE_JOBS[job_id]["progress_stage"] = stage
+            ACTIVE_JOBS[job_id]["progress_percent"] = percent
+            ACTIVE_JOBS[job_id]["updated_at"] = now_iso
+        try:
+            with get_db() as session:
+                j = session.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+                if j:
+                    j.status = "analyzing"
+                    j.progress_stage = stage
+                    j.progress_percent = percent
+                    j.updated_at = datetime.utcnow()
+        except Exception:
+            pass
+
+    try:
+        async with ANALYSIS_SEMAPHORE:
+            _on_progress("Initializing background analysis worker...", 10)
+            stats = await asyncio.to_thread(analyze_repo_holistic, repo_url, _on_progress)
+
+        # Update submission in database
+        with get_db() as session:
+            sub = session.query(Submission).filter(Submission.repo_url == repo_url).first()
+            if sub:
+                sub.repo_name = stats["name"]
+                sub.submitted_by_email = user_email
+                sub.submitted_by_name = user_name
+                sub.score = stats["score"]
+                sub.problems = stats["problems"]
+                sub.active_days = stats["active_days"]
+                sub.easy_count = stats["easy_count"]
+                sub.medium_count = stats["medium_count"]
+                sub.hard_count = stats["hard_count"]
+                sub.languages = stats["languages"]
+                sub.topics_covered = stats["topics_covered"]
+                sub.breakdown_json = json.dumps(stats["breakdown"])
+                sub.is_deleted = 0
+                sub.deleted_at = None
+                sub.updated_at = datetime.utcnow()
+            else:
+                sub = Submission(
+                    repo_url=repo_url,
+                    repo_name=stats["name"],
+                    submitted_by_email=user_email,
+                    submitted_by_name=user_name,
+                    score=stats["score"],
+                    problems=stats["problems"],
+                    active_days=stats["active_days"],
+                    easy_count=stats["easy_count"],
+                    medium_count=stats["medium_count"],
+                    hard_count=stats["hard_count"],
+                    languages=stats["languages"],
+                    topics_covered=stats["topics_covered"],
+                    breakdown_json=json.dumps(stats["breakdown"]),
+                    is_deleted=0,
+                    deleted_at=None
+                )
+                session.add(sub)
+
+            db_job = session.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+            if db_job:
+                db_job.status = "completed"
+                db_job.progress_stage = "Analysis Complete"
+                db_job.progress_percent = 100
+                db_job.stats_json = json.dumps(stats)
+                db_job.updated_at = datetime.utcnow()
+
+        if job_id in ACTIVE_JOBS:
+            ACTIVE_JOBS[job_id]["status"] = "completed"
+            ACTIVE_JOBS[job_id]["progress_stage"] = "Analysis Complete"
+            ACTIVE_JOBS[job_id]["progress_percent"] = 100
+            ACTIVE_JOBS[job_id]["stats"] = stats
+            ACTIVE_JOBS[job_id]["updated_at"] = datetime.utcnow().isoformat()
+
+        logger.info(f"[Job {job_id}] Successfully finished analysis for {repo_url} (Score={stats['score']})")
+
+    except Exception as e:
+        err_msg = str(e) or "An error occurred during repository analysis."
+        logger.error(f"[Job {job_id}] Analysis failed for {repo_url}: {err_msg}")
+        try:
+            with get_db() as session:
+                db_job = session.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+                if db_job:
+                    db_job.status = "failed"
+                    db_job.error_message = err_msg
+                    db_job.progress_stage = "Failed"
+                    db_job.updated_at = datetime.utcnow()
+        except Exception:
+            pass
+
+        if job_id in ACTIVE_JOBS:
+            ACTIVE_JOBS[job_id]["status"] = "failed"
+            ACTIVE_JOBS[job_id]["progress_stage"] = "Failed"
+            ACTIVE_JOBS[job_id]["error_message"] = err_msg
+            ACTIVE_JOBS[job_id]["updated_at"] = datetime.utcnow().isoformat()
+
+
 @app.post("/api/admin/trigger-refresh")
 async def admin_trigger_refresh(request: Request):
-    """Allow authorized Google admins to manually trigger the incremental refresh immediately."""
+    """Allow authorized Google admins to trigger incremental refresh in the background."""
     admin_user = require_admin_user(request)
     admin_email = admin_user["email"]
-    logger.info(f"Manual repository refresh triggered by authorized admin: {admin_email}")
-    updated_count = await run_scheduled_refresh_all_repos()
+    logger.info(f"Manual background refresh triggered by admin: {admin_email}")
+    asyncio.create_task(run_scheduled_refresh_all_repos())
     return {
         "success": True,
-        "message": f"Successfully executed incremental refresh for {updated_count} repositories.",
-        "updated_count": updated_count
+        "message": "Incremental refresh started in the background for all registered repositories."
     }
 
 @app.post("/api/auth/google")
@@ -1102,73 +1464,135 @@ async def submit_repo(payload: SubmitRepoRequest, request: Request):
             detail=f"Please wait {remaining} seconds before submitting another repository."
         )
 
-    try:
-        async with ANALYSIS_SEMAPHORE:
-            stats = await asyncio.to_thread(analyze_repo_holistic, clean_url)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
-        logger.error(f"Analysis failed for {clean_url}: {str(e)}")
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        logger.error(f"Unexpected error during analysis for {clean_url}: {str(e)}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred during repository analysis.")
-
-    # Strictly reject repositories with 0 verifiable code solutions
-    if stats.get("problems", 0) == 0:
-        logger.warning(f"Submission rejected: {clean_url} submitted by {user_email} has 0 verifiable DSA code solutions.")
-        raise HTTPException(
-            status_code=422,
-            detail="No valid DSA code solutions found in this repository. Only automated templates, README.md, or non-code files were detected. Please commit and push your genuine DSA code files (.py, .cpp, .java, etc.) to GitHub before submitting to the leaderboard."
-        )
+    # Check if this exact repository URL is currently analyzing for this user
+    for j_id, j_data in ACTIVE_JOBS.items():
+        if j_data.get("repo_url") == clean_url and j_data.get("status") in ("queued", "analyzing"):
+            return {
+                "success": True,
+                "job_id": j_id,
+                "status": j_data.get("status"),
+                "message": "Repository is already being analyzed in the background.",
+                "repo_url": clean_url
+            }
 
     SUBMISSION_RATE_LIMITS[user_email] = now
+    job_id = f"job_{uuid.uuid4().hex[:12]}"
+    job_record = {
+        "job_id": job_id,
+        "repo_url": clean_url,
+        "submitted_by_email": user_email,
+        "submitted_by_name": user_name,
+        "status": "queued",
+        "progress_stage": "Queued for analysis",
+        "progress_percent": 5,
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat()
+    }
+    ACTIVE_JOBS[job_id] = job_record
 
-    # Save or update submission in Neon DB via SQLAlchemy
-    with get_db() as session:
-        sub = session.query(Submission).filter(Submission.repo_url == clean_url).first()
-        if sub:
-            sub.repo_name = stats["name"]
-            sub.submitted_by_email = user_email
-            sub.submitted_by_name = user_name
-            sub.score = stats["score"]
-            sub.problems = stats["problems"]
-            sub.active_days = stats["active_days"]
-            sub.easy_count = stats["easy_count"]
-            sub.medium_count = stats["medium_count"]
-            sub.hard_count = stats["hard_count"]
-            sub.languages = stats["languages"]
-            sub.topics_covered = stats["topics_covered"]
-            sub.breakdown_json = json.dumps(stats["breakdown"])
-            sub.is_deleted = 0
-            sub.deleted_at = None
-            sub.updated_at = datetime.utcnow()
-        else:
-            sub = Submission(
+    # Persist job record in DB
+    try:
+        with get_db() as session:
+            db_job = AnalysisJob(
+                id=job_id,
                 repo_url=clean_url,
-                repo_name=stats["name"],
                 submitted_by_email=user_email,
                 submitted_by_name=user_name,
-                score=stats["score"],
-                problems=stats["problems"],
-                active_days=stats["active_days"],
-                easy_count=stats["easy_count"],
-                medium_count=stats["medium_count"],
-                hard_count=stats["hard_count"],
-                languages=stats["languages"],
-                topics_covered=stats["topics_covered"],
-                breakdown_json=json.dumps(stats["breakdown"]),
-                is_deleted=0,
-                deleted_at=None
+                status="queued",
+                progress_stage="Queued for analysis",
+                progress_percent=5
             )
-            session.add(sub)
+            session.add(db_job)
+    except Exception as e:
+        logger.warning(f"Could not write initial job record to DB: {e}")
 
-    logger.info(f"Repository {stats['name']} successfully analyzed & recorded for {user_email}")
+    # Launch background task
+    asyncio.create_task(run_analysis_job(job_id, clean_url, user_email, user_name))
+
     return {
         "success": True,
-        "message": f"Successfully analyzed {stats['name']} with incremental holistic scoring!",
-        "stats": stats
+        "job_id": job_id,
+        "status": "queued",
+        "message": "Repository analysis queued in the background.",
+        "repo_url": clean_url
     }
+
+@app.get("/api/jobs/{job_id}")
+async def get_job_status(job_id: str):
+    """Poll the status and progress of an asynchronous analysis job."""
+    job = ACTIVE_JOBS.get(job_id)
+    if job:
+        return {
+            "job_id": job_id,
+            "status": job.get("status"),
+            "progress_stage": job.get("progress_stage"),
+            "progress_percent": job.get("progress_percent", 0),
+            "stats": job.get("stats"),
+            "error": job.get("error_message"),
+            "repo_url": job.get("repo_url")
+        }
+
+    with get_db() as session:
+        db_job = session.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+        if not db_job:
+            raise HTTPException(status_code=404, detail="Job not found.")
+
+        stats = None
+        if db_job.stats_json:
+            try:
+                stats = json.loads(db_job.stats_json)
+            except Exception:
+                pass
+
+        return {
+            "job_id": db_job.id,
+            "status": db_job.status,
+            "progress_stage": db_job.progress_stage,
+            "progress_percent": db_job.progress_percent,
+            "stats": stats,
+            "error": db_job.error_message,
+            "repo_url": db_job.repo_url
+        }
+
+@app.get("/api/user/active-job")
+async def get_user_active_job(request: Request):
+    """Retrieve the currently active analysis job for the logged-in user, if any."""
+    user = get_current_user_from_request(request)
+    if not user:
+        return {"has_active_job": False}
+    user_email = user.get("email", "").lower().strip()
+
+    for j_id, j_data in ACTIVE_JOBS.items():
+        if j_data.get("submitted_by_email", "").lower() == user_email and j_data.get("status") in ("queued", "analyzing"):
+            return {
+                "has_active_job": True,
+                "job": {
+                    "job_id": j_id,
+                    "status": j_data.get("status"),
+                    "progress_stage": j_data.get("progress_stage"),
+                    "progress_percent": j_data.get("progress_percent", 0),
+                    "repo_url": j_data.get("repo_url")
+                }
+            }
+
+    with get_db() as session:
+        db_job = session.query(AnalysisJob)\
+            .filter(func.lower(AnalysisJob.submitted_by_email) == user_email, AnalysisJob.status.in_(["queued", "analyzing"]))\
+            .order_by(AnalysisJob.created_at.desc())\
+            .first()
+        if db_job:
+            return {
+                "has_active_job": True,
+                "job": {
+                    "job_id": db_job.id,
+                    "status": db_job.status,
+                    "progress_stage": db_job.progress_stage,
+                    "progress_percent": db_job.progress_percent,
+                    "repo_url": db_job.repo_url
+                }
+            }
+
+    return {"has_active_job": False}
 
 @app.get("/api/user/my-repo")
 async def get_my_synced_repo(request: Request):
