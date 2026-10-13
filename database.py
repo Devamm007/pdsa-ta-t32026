@@ -286,102 +286,102 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     logger.info("SQLAlchemy metadata verified / tables created.")
 
-    # # Seed benchmark initial submissions if database is empty
-    # with get_db() as session:
-    #     count = session.query(Submission).count()
-    #     if count == 0:
-    #         logger.info("Database submissions table empty. Seeding verified benchmark repos...")
-    #         initial_data = [
-    #             Submission(
-    #                 repo_url="https://github.com/25f2006944-glitch/neetcode-submissions",
-    #                 repo_name="25f2006944-glitch/neetcode-submissions",
-    #                 submitted_by_email="system",
-    #                 submitted_by_name="Glitch",
-    #                 score=11.17, problems=6, active_days=3,
-    #                 easy_count=3, medium_count=3, hard_count=0,
-    #                 languages="Python", topics_covered="Arrays & Hashing",
-    #                 is_deleted=0
-    #             ),
-    #             Submission(
-    #                 repo_url="https://github.com/aravinds-arv/DSA-Challenge-Python",
-    #                 repo_name="aravinds-arv/DSA-Challenge-Python",
-    #                 submitted_by_email="system",
-    #                 submitted_by_name="Aravind",
-    #                 score=8.39, problems=6, active_days=3,
-    #                 easy_count=5, medium_count=1, hard_count=0,
-    #                 languages="Python", topics_covered="Arrays & Hashing",
-    #                 is_deleted=0
-    #             ),
-    #             Submission(
-    #                 repo_url="https://github.com/25f2007872/neetcode-challenge",
-    #                 repo_name="25f2007872/neetcode-challenge",
-    #                 submitted_by_email="system",
-    #                 submitted_by_name="25f2007872",
-    #                 score=6.86, problems=6, active_days=1,
-    #                 easy_count=5, medium_count=1, hard_count=0,
-    #                 languages="Python", topics_covered="Arrays & Hashing",
-    #                 is_deleted=0
-    #             ),
-    #             Submission(
-    #                 repo_url="https://github.com/vickykumarcodes/neetcode-submissions",
-    #                 repo_name="vickykumarcodes/neetcode-submissions",
-    #                 submitted_by_email="system",
-    #                 submitted_by_name="Vicky Kumar",
-    #                 score=5.60, problems=5, active_days=1,
-    #                 easy_count=5, medium_count=0, hard_count=0,
-    #                 languages="Python", topics_covered="Arrays & Hashing",
-    #                 is_deleted=0
-    #             ),
-    #             Submission(
-    #                 repo_url="https://github.com/25f3000561/neetcode-submissions",
-    #                 repo_name="25f3000561/neetcode-submissions",
-    #                 submitted_by_email="system",
-    #                 submitted_by_name="25f3000561",
-    #                 score=3.41, problems=3, active_days=1,
-    #                 easy_count=3, medium_count=0, hard_count=0,
-    #                 languages="Python", topics_covered="Arrays & Hashing",
-    #                 is_deleted=0
-    #             ),
-    #             Submission(
-    #                 repo_url="https://github.com/ArpitaSingh246/DSA-Challenge-Python",
-    #                 repo_name="ArpitaSingh246/DSA-Challenge-Python",
-    #                 submitted_by_email="system",
-    #                 submitted_by_name="Arpita Singh",
-    #                 score=2.57, problems=2, active_days=2,
-    #                 easy_count=2, medium_count=0, hard_count=0,
-    #                 languages="Python", topics_covered="Arrays & Hashing",
-    #                 is_deleted=0
-    #             ),
-    #             Submission(
-    #                 repo_url="https://github.com/ajay-verma-iitm/neetcode-submissions",
-    #                 repo_name="ajay-verma-iitm/neetcode-submissions",
-    #                 submitted_by_email="system",
-    #                 submitted_by_name="Ajay Verma",
-    #                 score=1.07, problems=1, active_days=1,
-    #                 easy_count=1, medium_count=0, hard_count=0,
-    #                 languages="Python", topics_covered="Arrays & Hashing",
-    #                 is_deleted=0
-    #             ),
-    #             Submission(
-    #                 repo_url="https://github.com/25f1001395/neetcode-submissions",
-    #                 repo_name="25f1001395/neetcode-submissions",
-    #                 submitted_by_email="system",
-    #                 submitted_by_name="25f1001395",
-    #                 score=1.07, problems=1, active_days=1,
-    #                 easy_count=1, medium_count=0, hard_count=0,
-    #                 languages="Python", topics_covered="Arrays & Hashing",
-    #                 is_deleted=0
-    #             ),
-    #             Submission(
-    #                 repo_url="https://github.com/23f2001123/neetcode-submissions",
-    #                 repo_name="23f2001123/neetcode-submissions",
-    #                 submitted_by_email="system",
-    #                 submitted_by_name="23f2001123",
-    #                 score=0.00, problems=0, active_days=0,
-    #                 easy_count=0, medium_count=0, hard_count=0,
-    #                 languages="None", topics_covered="None",
-    #                 is_deleted=0
-    #             ),
-    #         ]
-    #         session.add_all(initial_data)
-    #         logger.info(f"Seeded {len(initial_data)} benchmark repositories into submissions.")
+    # Seed benchmark initial submissions if database is empty
+    with get_db() as session:
+        count = session.query(Submission).count()
+        if count == 0:
+            logger.info("Database submissions table empty. Seeding verified benchmark repos...")
+            initial_data = [
+                Submission(
+                    repo_url="https://github.com/25f2006944-glitch/neetcode-submissions",
+                    repo_name="25f2006944-glitch/neetcode-submissions",
+                    submitted_by_email="system",
+                    submitted_by_name="Glitch",
+                    score=11.17, problems=6, active_days=3,
+                    easy_count=3, medium_count=3, hard_count=0,
+                    languages="Python", topics_covered="Arrays & Hashing",
+                    is_deleted=0
+                ),
+                Submission(
+                    repo_url="https://github.com/aravinds-arv/DSA-Challenge-Python",
+                    repo_name="aravinds-arv/DSA-Challenge-Python",
+                    submitted_by_email="system",
+                    submitted_by_name="Aravind",
+                    score=8.39, problems=6, active_days=3,
+                    easy_count=5, medium_count=1, hard_count=0,
+                    languages="Python", topics_covered="Arrays & Hashing",
+                    is_deleted=0
+                ),
+                Submission(
+                    repo_url="https://github.com/25f2007872/neetcode-challenge",
+                    repo_name="25f2007872/neetcode-challenge",
+                    submitted_by_email="system",
+                    submitted_by_name="25f2007872",
+                    score=6.86, problems=6, active_days=1,
+                    easy_count=5, medium_count=1, hard_count=0,
+                    languages="Python", topics_covered="Arrays & Hashing",
+                    is_deleted=0
+                ),
+                Submission(
+                    repo_url="https://github.com/vickykumarcodes/neetcode-submissions",
+                    repo_name="vickykumarcodes/neetcode-submissions",
+                    submitted_by_email="system",
+                    submitted_by_name="Vicky Kumar",
+                    score=5.60, problems=5, active_days=1,
+                    easy_count=5, medium_count=0, hard_count=0,
+                    languages="Python", topics_covered="Arrays & Hashing",
+                    is_deleted=0
+                ),
+                Submission(
+                    repo_url="https://github.com/25f3000561/neetcode-submissions",
+                    repo_name="25f3000561/neetcode-submissions",
+                    submitted_by_email="system",
+                    submitted_by_name="25f3000561",
+                    score=3.41, problems=3, active_days=1,
+                    easy_count=3, medium_count=0, hard_count=0,
+                    languages="Python", topics_covered="Arrays & Hashing",
+                    is_deleted=0
+                ),
+                Submission(
+                    repo_url="https://github.com/ArpitaSingh246/DSA-Challenge-Python",
+                    repo_name="ArpitaSingh246/DSA-Challenge-Python",
+                    submitted_by_email="system",
+                    submitted_by_name="Arpita Singh",
+                    score=2.57, problems=2, active_days=2,
+                    easy_count=2, medium_count=0, hard_count=0,
+                    languages="Python", topics_covered="Arrays & Hashing",
+                    is_deleted=0
+                ),
+                Submission(
+                    repo_url="https://github.com/ajay-verma-iitm/neetcode-submissions",
+                    repo_name="ajay-verma-iitm/neetcode-submissions",
+                    submitted_by_email="system",
+                    submitted_by_name="Ajay Verma",
+                    score=1.07, problems=1, active_days=1,
+                    easy_count=1, medium_count=0, hard_count=0,
+                    languages="Python", topics_covered="Arrays & Hashing",
+                    is_deleted=0
+                ),
+                Submission(
+                    repo_url="https://github.com/25f1001395/neetcode-submissions",
+                    repo_name="25f1001395/neetcode-submissions",
+                    submitted_by_email="system",
+                    submitted_by_name="25f1001395",
+                    score=1.07, problems=1, active_days=1,
+                    easy_count=1, medium_count=0, hard_count=0,
+                    languages="Python", topics_covered="Arrays & Hashing",
+                    is_deleted=0
+                ),
+                Submission(
+                    repo_url="https://github.com/23f2001123/neetcode-submissions",
+                    repo_name="23f2001123/neetcode-submissions",
+                    submitted_by_email="system",
+                    submitted_by_name="23f2001123",
+                    score=0.00, problems=0, active_days=0,
+                    easy_count=0, medium_count=0, hard_count=0,
+                    languages="None", topics_covered="None",
+                    is_deleted=0
+                ),
+            ]
+            session.add_all(initial_data)
+            logger.info(f"Seeded {len(initial_data)} benchmark repositories into submissions.")
