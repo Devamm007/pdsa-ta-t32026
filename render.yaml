@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: dsa-challenge-arena
+    env: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: PRODUCTION
+        value: "true"
+      - key: DATABASE_URL
+        sync: false

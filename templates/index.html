@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSA Arena | Holistic DSA Ranking</title>
+    <meta name="description" content="Holistic LeetCode/NeetCode repository analyzer, commit consistency ranking, Git & DSA playbooks, and secure Google OAuth. Track your daily DSA progress.">
+    <meta name="theme-color" content="#07090e">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    <!-- Google Identity Services (GSI) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+    <!-- Ambient Background Glow Elements -->
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+
+    <div class="app-container">
+        <!-- Navigation Header -->
+        <header class="app-header">
+            <div class="brand">
+                <div class="brand-icon">
+                    <i class="fa-solid fa-fire-flame-curved"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>DSA <span>Arena</span></h1>
+                    <p class="tagline">Holistic DSA Ranking</p>
+                </div>
+            </div>
+
+            <nav class="nav-tabs" id="main-nav-tabs" role="tablist" aria-label="Main navigation">
+                <button class="tab-btn active" data-tab="leaderboard" id="tab-btn-leaderboard" role="tab" aria-selected="true">
+                    <i class="fa-solid fa-trophy"></i> <span>Leaderboard</span>
+                </button>
+                <button class="tab-btn" data-tab="submit" id="tab-btn-submit" role="tab" aria-selected="false">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> <span>Submit Repo</span>
+                </button>
+                <button class="tab-btn" data-tab="backfill" id="tab-btn-backfill" role="tab" aria-selected="false">
+                    <i class="fa-solid fa-rotate"></i> <span>Sync Past Solves</span> <span class="nav-new-badge">Backfill</span>
+                </button>
+                <button class="tab-btn" data-tab="playbook" id="tab-btn-playbook" role="tab" aria-selected="false">
+                    <i class="fa-solid fa-book-open"></i> <span>Setup Guide</span> <span class="nav-guide-badge">Guide</span>
+                </button>
+                <button class="tab-btn" data-tab="steps" id="tab-btn-steps" role="tab" aria-selected="false">
+                    <i class="fa-solid fa-list-check"></i> <span>Steps &amp; Notes</span>
+                </button>
+            </nav>
+
+            <div class="auth-section" id="auth-section">
+                <!-- Logged Out View -->
+                <div id="logged-out-view" class="auth-box">
+                    <div id="g_id_onload"
+                         data-client_id="{{ google_client_id }}"
+                         data-callback="handleGoogleCredentialResponse"
+                         data-auto_prompt="false">
+                    </div>
+                    <div id="google-btn-container" class="g-signin-wrapper"></div>
+                </div>
+
+                <!-- Logged In View -->
+                <div id="logged-in-view" class="user-profile-box hidden">
+                    <img id="user-avatar" src="" alt="User avatar" class="user-avatar">
+                    <div class="user-info">
+                        <div class="user-name-row">
+                            <span id="user-name" class="user-name">User</span>
+                            <span id="admin-badge" class="badge-admin-tag hidden"><i class="fa-solid fa-shield"></i> Admin</span>
+                        </div>
+                        <span id="user-email" class="user-email">email@example.com</span>
+                    </div>
+                    <button class="btn btn-icon" id="logout-btn" title="Sign Out" aria-label="Sign out">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mobile Hamburger Toggle Button -->
+            <button class="mobile-nav-toggle" id="mobile-nav-toggle" aria-label="Toggle navigation menu" aria-expanded="false" title="Menu">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+        </header>
+
+        <!-- OAuth Notice (if Google Client ID missing) -->
+        <div id="oauth-notice" class="notice-banner hidden" role="alert">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Google Client ID not detected in <code>.env</code>. Add your Google OAuth Web Client ID to enable sign-in.</span>
+            <button class="btn-dismiss" onclick="this.closest('.notice-banner').remove()" aria-label="Dismiss">&times;</button>
+        </div>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- TAB 1: LEADERBOARD -->
+            <section id="tab-leaderboard" class="tab-pane active" role="tabpanel" aria-labelledby="tab-btn-leaderboard">
+                <div class="pane-header">
+                    <div class="pane-title">
+                        <h2>Holistic DSA Ranking</h2>
+                        <p>Evaluates verified problems solved, calibrated difficulty weights, and daily consistency: <strong>&sum;(Daily Pts<sup>0.72</sup>)</strong> — rewarding steady focus over cramming.</p>
+                    </div>
+                    <div class="pane-actions">
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="leaderboard-search" placeholder="Search repo, author, language..." aria-label="Search leaderboard">
+                        </div>
+                        <button class="btn btn-secondary" id="refresh-leaderboard-btn" aria-label="Refresh leaderboard">
+                            <i class="fa-solid fa-arrows-rotate"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Metrics Highlights Cards -->
+                <div class="metrics-grid">
+                    <div class="metric-card glass-panel">
+                        <div class="metric-icon"><i class="fa-solid fa-code-fork"></i></div>
+                        <div class="metric-data">
+                            <span class="metric-val" id="stat-total-repos">0</span>
+                            <span class="metric-label">Active Repositories</span>
+                        </div>
+                    </div>
+                    <div class="metric-card glass-panel">
+                        <div class="metric-icon"><i class="fa-solid fa-calendar-check"></i></div>
+                        <div class="metric-data">
+                            <span class="metric-val" id="stat-top-streak">0d</span>
+                            <span class="metric-label">Max Active Days</span>
+                        </div>
+                    </div>
+                    <div class="metric-card glass-panel">
+                        <div class="metric-icon"><i class="fa-solid fa-award"></i></div>
+                        <div class="metric-data">
+                            <span class="metric-val" id="stat-top-score">0.00</span>
+                            <span class="metric-label">Top Holistic Score</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 24-Hour Automated Refresh Banner (7:00 PM IST) -->
+                <div class="schedule-banner glass-panel">
+                    <div class="schedule-info">
+                        <span class="pulse-dot" aria-hidden="true"></span>
+                        <div>
+                            <strong>Daily Incremental Refresh:</strong> Runs every 24h at <strong>7:00 PM IST (GMT +5:30)</strong>. Incremental commit caching ensures no duplicate inspections.
+                        </div>
+                    </div>
+                    <div class="schedule-timer-wrapper">
+                        <span class="timer-badge" id="schedule-countdown" aria-live="polite">Next Refresh: Calculating...</span>
+                        <button class="btn btn-primary btn-sm hidden" id="admin-trigger-refresh-btn" title="Admin: trigger immediate refresh">
+                            <i class="fa-solid fa-bolt"></i> Run Now
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-card glass-panel">
+                    <div class="table-responsive">
+                        <table class="data-table" id="leaderboard-table" aria-label="DSA Challenge leaderboard">
+                            <thead>
+                                <tr>
+                                    <th style="width: 60px;">Rank</th>
+                                    <th>Repository</th>
+                                    <th>Submitted By</th>
+                                    <th>Problems</th>
+                                    <th>Active Days</th>
+                                    <th>Language &amp; Topics</th>
+                                    <th class="text-right">Score</th>
+                                    <th style="width: 80px;" class="text-center">Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leaderboard-tbody">
+                                <tr>
+                                    <td colspan="8" class="text-center py-4">
+                                        <div class="spinner" aria-hidden="true"></div> Loading leaderboard...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: SUBMIT REPO -->
+            <section id="tab-submit" class="tab-pane" role="tabpanel" aria-labelledby="tab-btn-submit">
+                <div class="pane-header">
+                    <div class="pane-title">
+                        <h2>Submit Repository</h2>
+                        <p>Analyze your public NeetCode or LeetCode repository with genuine code validation and commit distribution evaluation.</p>
+                    </div>
+                </div>
+
+                <div class="grid-2col">
+                    <div class="glass-panel form-card">
+                        <div class="backfill-cta-banner">
+                            <div class="cta-icon"><i class="fa-solid fa-rotate"></i></div>
+                            <div class="cta-content">
+                                <strong>Already solved problems on LeetCode or NeetCode?</strong>
+                                <p>Don't start with 0 points! If your repo has only a README or you have historical solves, read our <a href="#" onclick="switchTab('backfill'); return false;" class="cta-link">Sync Past Solved Problems Guide &rarr;</a> to backfill all your code in 2 minutes.</p>
+                            </div>
+                        </div>
+
+                        <div id="active-repo-container" class="hidden">
+                            <!-- Populated dynamically when user has a synced repository -->
+                        </div>
+
+                        <div class="auth-gate-warning hidden" id="submit-auth-warning">
+                            <i class="fa-solid fa-lock"></i>
+                            <div>
+                                <strong>Google OAuth Sign-In Required</strong>
+                                <p>To maintain arena integrity and prevent abuse, signing in with your Google account is required to submit repositories.</p>
+                            </div>
+                        </div>
+
+                        <form id="repo-submit-form" class="repo-form" novalidate>
+                            <div class="form-group">
+                                <label for="repo-url-input">
+                                    <i class="fa-brands fa-github"></i> Public GitHub Repository URL
+                                </label>
+                                <div class="input-with-icon">
+                                    <input type="url"
+                                           id="repo-url-input"
+                                           required
+                                           placeholder="https://github.com/username/neetcode-submissions"
+                                           autocomplete="off"
+                                           spellcheck="false">
+                                </div>
+                                <small class="form-hint">Supports NeetCode auto-sync, LeetHub/LeetSync extensions, and custom folders. First time? Read the <a href="#" onclick="switchTab('playbook'); return false;" style="color:#a5b4fc; text-decoration:underline;">GitHub &amp; DSA Setup Guide &rarr;</a></small>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-block" id="submit-btn" disabled>
+                                <span class="btn-text"><i class="fa-solid fa-bolt"></i> Run Holistic Deep Analysis</span>
+                                <span class="btn-loader hidden"><i class="fa-solid fa-circle-notch fa-spin"></i> Cloning &amp; Inspecting Repo...</span>
+                            </button>
+                        </form>
+
+                        <div id="submit-result-card" class="result-card hidden">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="glass-panel info-card">
+                        <h3><i class="fa-solid fa-shield-halved"></i> How Holistic Scoring Works</h3>
+                        <ul class="rules-list">
+                            <li>
+                                <div class="rule-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
+                                <div>
+                                    <strong>Real Repository Understanding</strong>
+                                    <p>We inspect code directories and deduplicate repeated attempts (e.g. <code>submission-0</code>, <code>submission-4</code> count as 1 unique solved problem, not 5 artificial commits).</p>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="rule-icon"><i class="fa-solid fa-layer-group"></i></div>
+                                <div>
+                                    <strong>Calibrated Difficulty Weights</strong>
+                                    <p>Points scale with algorithmic complexity: <code>Easy (1.0 pt)</code>, <code>Medium (2.5 pts)</code>, and <code>Hard (5.0 pts)</code>.</p>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="rule-icon"><i class="fa-solid fa-calendar-check"></i></div>
+                                <div>
+                                    <strong>Consistency Over Cramming</strong>
+                                    <p>Daily points are raised to the power <code>0.72</code>. Solving 2 problems across 10 days generates a vastly higher score than dumping 20 problems in one afternoon.</p>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="rule-icon"><i class="fa-solid fa-certificate"></i></div>
+                                <div>
+                                    <strong>Holistic Multipliers</strong>
+                                    <p>Bonuses for multi-language solutions (+5%), topic diversity across 4+ categories (+6%), and README documentation (+6%).</p>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: SYNC PAST SOLVED PROBLEMS & HISTORY RECOVERY -->
+            <section id="tab-backfill" class="tab-pane" role="tabpanel" aria-labelledby="tab-btn-backfill">
+                <div class="pane-header">
+                    <div class="pane-title">
+                        <h2><i class="fa-solid fa-rotate" style="color:var(--accent-primary);"></i> Sync Past Solved Problems</h2>
+                        <p>Already solved problems on LeetCode or NeetCode? Recover and sync your historical accepted solutions into your GitHub repository in under 2 minutes.</p>
+                    </div>
+                </div>
+
+                <!-- Backfill Highlights Hero Grid -->
+                <div class="backfill-hero-grid">
+                    <div class="backfill-hero-card">
+                        <div class="hero-card-icon" style="background: rgba(99,102,241,0.15); color: #818cf8;">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                        </div>
+                        <h4>History Recovery</h4>
+                        <p>Most standard tools only sync <em>new</em> submissions going forward. History recovery backfills your entire past solve history into GitHub automatically.</p>
+                    </div>
+                    <div class="backfill-hero-card">
+                        <div class="hero-card-icon" style="background: rgba(16,185,129,0.15); color: #34d399;">
+                            <i class="fa-solid fa-bolt"></i>
+                        </div>
+                        <h4>One-Click Automated</h4>
+                        <p>Export all historical accepted solutions without manually opening hundreds of tabs or re-coding previously solved problems.</p>
+                    </div>
+                    <div class="backfill-hero-card">
+                        <div class="hero-card-icon" style="background: rgba(6,182,212,0.15); color: #22d3ee;">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+                        <h4>Safe &amp; Fine-Grained</h4>
+                        <p>Never share account passwords. Use dedicated fine-grained GitHub repository tokens scoped strictly to your DSA repository.</p>
+                    </div>
+                    <div class="backfill-hero-card">
+                        <div class="hero-card-icon" style="background: rgba(245,158,11,0.15); color: #fbbf24;">
+                            <i class="fa-solid fa-trophy"></i>
+                        </div>
+                        <h4>Instant Arena Ranking</h4>
+                        <p>Once your past code solutions are committed to GitHub, submit your repository URL here and claim your spot on the live Leaderboard!</p>
+                    </div>
+                </div>
+
+                <!-- Backfill Sub-navigation Tabs -->
+                <div class="backfill-nav pill-nav" role="tablist" aria-label="Backfill Guide sections">
+                    <button class="pill-btn active" data-subtab="matrix" role="tab"><i class="fa-solid fa-table-list"></i> 1. Extension Comparison</button>
+                    <button class="pill-btn" data-subtab="oneclick" role="tab"><i class="fa-solid fa-wand-magic-sparkles"></i> 2. One-Click Extensions</button>
+                    <button class="pill-btn" data-subtab="neetcode" role="tab"><i class="fa-solid fa-code-merge"></i> 3. NeetCode GitHub Sync</button>
+                    <button class="pill-btn" data-subtab="leethub" role="tab"><i class="fa-solid fa-repeat"></i> 4. LeetHub v2 Workaround</button>
+                    <button class="pill-btn" data-subtab="cli" role="tab"><i class="fa-solid fa-terminal"></i> 5. Python CLI Exporter</button>
+                    <button class="pill-btn" data-subtab="structure" role="tab"><i class="fa-solid fa-folder-tree"></i> 6. Repo Structure Tips</button>
+                </div>
+
+                <!-- SUBSECTION 1: Extension Comparison Matrix -->
+                <div id="subtab-backfill-matrix" class="backfill-section active" role="tabpanel">
+                    <div class="glass-panel">
+                        <div class="section-title-row">
+                            <div>
+                                <h3><i class="fa-solid fa-table-list"></i> LeetCode &amp; NeetCode Sync Tools Comparison</h3>
+                                <p class="text-muted">A comprehensive breakdown of which extensions support historical backfilling vs. only new submissions.</p>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive" style="margin-top: 14px;">
+                            <table class="data-table" aria-label="Extension sync comparison matrix">
+                                <thead>
+                                    <tr>
+                                        <th>Tool / Extension</th>
+                                        <th>Syncs Old Solved Problems?</th>
+                                        <th>How It Works</th>
+                                        <th>Platform Target</th>
+                                        <th>Recommendation</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>LeetCode Tracker</strong></td>
+                                        <td><span class="badge-status success"><i class="fa-solid fa-check"></i> Yes (Full)</span></td>
+                                        <td>"One-click import of all your past submissions" — scans LeetCode profile and commits historical solutions into GitHub.</td>
+                                        <td><span class="pill-tag">Chrome Extension</span></td>
+                                        <td><strong style="color:var(--accent-emerald);">Top Pick for One-Click Sync</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>LeetSync (Devesh Samant)</strong></td>
+                                        <td><span class="badge-status success"><i class="fa-solid fa-check"></i> Yes (Multi-Way)</span></td>
+                                        <td>"Multi-Way Sync &amp; History Recovery" — scans and syncs existing solved problems when you connect a repository.</td>
+                                        <td><span class="pill-tag">Chrome Extension</span></td>
+                                        <td><strong style="color:var(--accent-emerald);">Great Alternative for LeetCode</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>SyncLeet</strong></td>
+                                        <td><span class="badge-status success"><i class="fa-solid fa-check"></i> Yes</span></td>
+                                        <td>Added automated backfill of past submission history directly into your configured GitHub repo.</td>
+                                        <td><span class="pill-tag">Chrome Extension</span></td>
+                                        <td><span class="text-secondary">Solid automated backfill tool</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>LeetTracker</strong></td>
+                                        <td><span class="badge-status success"><i class="fa-solid fa-check"></i> Yes</span></td>
+                                        <td>Companion Chrome extension pulls full solve history, including older submissions not available via public API.</td>
+                                        <td><span class="pill-tag">Chrome Extension</span></td>
+                                        <td><span class="text-secondary">Pulls full solve history</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>LeetNotion (VS Code)</strong></td>
+                                        <td><span class="badge-status success"><i class="fa-solid fa-check"></i> Yes</span></td>
+                                        <td>"Existing Submissions Sync — import and sync all past submissions to your Notion template" (for notes &amp; journaling).</td>
+                                        <td><span class="pill-tag">VS Code Extension</span></td>
+                                        <td><span class="text-secondary">Great for Notion dashboards</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>LeetHub v2</strong></td>
+                                        <td><span class="badge-status warning"><i class="fa-solid fa-xmark"></i> No (New Only)</span></td>
+                                        <td>Only syncs newly accepted submissions going forward. Open GitHub issues requesting history sync remain unimplemented.</td>
+                                        <td><span class="pill-tag">Chrome Extension</span></td>
+                                        <td><span class="text-secondary">Use the Re-submit Workaround below</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>NeetCode.io GitHub Sync</strong></td>
+                                        <td><span class="badge-status success"><i class="fa-solid fa-check"></i> On In-Editor Submit</span></td>
+                                        <td>Automatically commits to <code>neetcode-submissions</code> when submitting code in NeetCode's browser editor.</td>
+                                        <td><span class="pill-tag">NeetCode Native</span></td>
+                                        <td><strong style="color:var(--accent-cyan);">Best for NeetCode 150 / 250</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>leetcode-export (CLI)</strong></td>
+                                        <td><span class="badge-status success"><i class="fa-solid fa-check"></i> Yes (Bulk All)</span></td>
+                                        <td>Python CLI script pulling all accepted solutions into organized directories in under 30 seconds.</td>
+                                        <td><span class="pill-tag">Python CLI Script</span></td>
+                                        <td><strong style="color:var(--accent-primary);">Best for 100+ Bulk Historical Solves</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUBSECTION 2: One-Click Extension Guide -->
+                <div id="subtab-backfill-oneclick" class="backfill-section hidden" role="tabpanel">
+                    <div class="glass-panel">
+                        <h3><i class="fa-solid fa-wand-magic-sparkles"></i> One-Click Backfill with LeetCode Tracker or LeetSync</h3>
+                        <p class="text-muted">If you want all your historical LeetCode problems pushed to GitHub automatically in 2 minutes:</p>
+
+                        <div class="cheatsheet-steps" style="margin-top: 18px;">
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 1</div>
+                                <h4>Install the Chrome Extension</h4>
+                                <p>Install <strong>LeetCode Tracker</strong> or <strong>LeetSync (by Devesh Samant)</strong> from the official Chrome Web Store.</p>
+                                <span class="pill-tag" style="margin-top:8px;"><i class="fa-brands fa-chrome"></i> Chrome Web Store</span>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 2</div>
+                                <h4>Create a Dedicated GitHub Repository</h4>
+                                <p>Go to GitHub and create a new public repository named <code>dsa-challenge</code> or <code>leetcode-submissions</code>. Keep it clean with a default <code>README.md</code>.</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 3</div>
+                                <h4>Link Your Repository Securely</h4>
+                                <p>In the extension settings, authenticate with GitHub. <strong>Best practice:</strong> generate a Fine-Grained Personal Access Token scoped strictly to this single repository with only <code>Contents: Read and write</code> permissions.</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 4</div>
+                                <h4>Trigger "Sync Past Submissions"</h4>
+                                <p>Click <strong>"Sync Past Submissions"</strong> (or <strong>"History Recovery"</strong> in LeetSync). The extension iterates through your LeetCode profile's accepted submissions and automatically commits each problem's code into your GitHub repo!</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 5</div>
+                                <h4>Submit URL to the Arena Leaderboard</h4>
+                                <p>Once the commits finish, copy your GitHub repository URL, switch to the <strong>Submit Repo</strong> tab, and submit your link to claim your live rank!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUBSECTION 3: NeetCode GitHub Sync Guide -->
+                <div id="subtab-backfill-neetcode" class="backfill-section hidden" role="tabpanel">
+                    <div class="glass-panel">
+                        <h3><i class="fa-solid fa-code-merge"></i> NeetCode.io GitHub Sync &amp; Avoiding Empty Repositories</h3>
+                        <p class="text-muted">Understanding why fresh NeetCode repos start with only a README and how to sync your code solutions.</p>
+
+                        <div class="notice-card" style="margin: 16px 0;">
+                            <i class="fa-solid fa-circle-exclamation" style="font-size:1.3rem; color:var(--accent-amber); flex-shrink:0;"></i>
+                            <div>
+                                <strong>Why did my repository only have a README.md? (The 23f Guy Issue)</strong>
+                                <p>When you enable GitHub Sync on NeetCode.io, NeetCode creates an initial commit containing only a default <code>README.md</code> explaining how sync works. <strong>NeetCode only commits your code when you click "Submit" inside their in-browser editor!</strong> If you only checked off checkboxes without submitting code in the editor, your GitHub repo remains empty of code files.</p>
+                            </div>
+                        </div>
+
+                        <div class="cheatsheet-steps">
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 1</div>
+                                <h4>Enable GitHub Sync in NeetCode</h4>
+                                <p>Go to your <a href="https://neetcode.io" target="_blank" rel="noopener noreferrer" class="link-inline">NeetCode.io</a> Account Settings &rarr; Integrations &rarr; Connect GitHub. Authorize the integration to create your <code>neetcode-submissions</code> repo.</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 2</div>
+                                <h4>Open Solved Problems in NeetCode Editor</h4>
+                                <p>Go to your Roadmap or Practice list on NeetCode. For each problem you already solved (e.g. <em>Contains Duplicate</em>, <em>Two Sum</em>, <em>Group Anagrams</em>), open the problem in the browser.</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 3</div>
+                                <h4>Click "Submit" in the In-Browser Code Editor</h4>
+                                <p>Ensure your solution is in the code box and hit <strong>Submit</strong>. Once accepted, NeetCode immediately commits <code>Data Structures &amp; Algorithms/&lt;problem&gt;/submission-0.py</code> to your GitHub repo!</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 4</div>
+                                <h4>Verify Code Files on GitHub</h4>
+                                <p>Open your repository on GitHub. You will now see genuine <code>.py</code>, <code>.cpp</code>, or <code>.java</code> code files under problem directories. Now your repository is fully qualified for the Arena Leaderboard!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUBSECTION 4: LeetHub v2 Re-Submit Trick -->
+                <div id="subtab-backfill-leethub" class="backfill-section hidden" role="tabpanel">
+                    <div class="glass-panel">
+                        <h3><i class="fa-solid fa-repeat"></i> The LeetHub v2 Re-Submit Workaround</h3>
+                        <p class="text-muted">If you already use LeetHub v2 and don't want to switch extensions, you can backfill your past solutions in minutes:</p>
+
+                        <div class="grid-2col" style="margin-top: 16px;">
+                            <div class="workflow-card">
+                                <div class="workflow-badge auto"><i class="fa-solid fa-lightbulb"></i> How the Workaround Works</div>
+                                <h4>Zero Re-Coding Required</h4>
+                                <p>LeetCode permanently saves your latest accepted code inside the problem editor. You do not need to re-write your code from memory!</p>
+                                <ul style="margin-top: 12px; padding-left: 18px; color: var(--text-secondary); font-size: 0.88rem; line-height: 1.6;">
+                                    <li>1. Go to your LeetCode profile &rarr; <strong>Submissions</strong> tab.</li>
+                                    <li>2. Click on any previously accepted problem.</li>
+                                    <li>3. LeetCode loads your previously accepted code right in the editor.</li>
+                                    <li>4. Hit <strong>Submit</strong>.</li>
+                                    <li>5. LeetHub v2 immediately catches the accepted verdict and creates a git commit in your GitHub repository!</li>
+                                </ul>
+                            </div>
+
+                            <div class="workflow-card">
+                                <div class="workflow-badge manual"><i class="fa-solid fa-gauge-high"></i> Speed Tip for Batching</div>
+                                <h4>Batch Your Top 25–50 Solves</h4>
+                                <p>Since LeetHub v2 commits instantaneously on accepted verdicts, opening 10 problems in background tabs and clicking submit takes less than 3 minutes!</p>
+                                <div class="notice-card" style="margin-top: 14px;">
+                                    <i class="fa-solid fa-circle-check" style="color:var(--accent-emerald);"></i>
+                                    <div>
+                                        <strong>Automatic Deduplication:</strong>
+                                        <p>If you submit multiple times, the Arena's parser automatically deduplicates attempts and gives you credit for 1 unique problem with maximum points!</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUBSECTION 5: Python CLI & leetcode-export -->
+                <div id="subtab-backfill-cli" class="backfill-section hidden" role="tabpanel">
+                    <div class="glass-panel">
+                        <h3><i class="fa-solid fa-terminal"></i> Bulk Historical Export via Python CLI (Power Users)</h3>
+                        <p class="text-muted">If you have 100+ historical problems and want to export all code files locally in 30 seconds using an open-source CLI:</p>
+
+                        <div class="cheatsheet-steps" style="margin-top: 16px;">
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 1</div>
+                                <h4>Install leetcode-export via pip</h4>
+                                <pre class="code-box"><code>pip install leetcode-export</code></pre>
+                                <p class="text-muted">A lightweight, open-source Python utility that queries the LeetCode GraphQL API for all your accepted submissions.</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 2</div>
+                                <h4>Run the Bulk Export Script</h4>
+                                <pre class="code-box"><code># Run interactive export tool:
+leetcode-export --folder ./my-dsa-solutions</code></pre>
+                                <p class="text-muted">It downloads every accepted solution into clean directories with problem title, code file, and complexity metadata.</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 3</div>
+                                <h4>Push the Solutions to GitHub</h4>
+                                <pre class="code-box"><code>cd my-dsa-solutions
+git init
+git add .
+git commit -m "feat: bulk export of past accepted DSA solutions"
+git branch -M main
+git remote add origin https://github.com/your-username/dsa-challenge.git
+git push -u origin main</code></pre>
+                                <p class="text-muted">Creates your GitHub repository with all historical solutions and pushes to GitHub.</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 4</div>
+                                <h4>Submit Repository to the Arena</h4>
+                                <p>Switch to <strong>Submit Repo</strong>, enter your new repository URL, and watch the Holistic Analyzer inspect all your problems and grant your full score!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUBSECTION 6: Repository Structure Guide -->
+                <div id="subtab-backfill-structure" class="backfill-section hidden" role="tabpanel">
+                    <div class="glass-panel">
+                        <h3><i class="fa-solid fa-folder-tree"></i> Repository Structure Guide for 100% Parsing Accuracy</h3>
+                        <p class="text-muted">Ensure your repository folders and files are recognized by the Arena's AST and regex classifier:</p>
+
+                        <div class="grid-2col" style="margin-top: 16px;">
+                            <div class="glass-panel">
+                                <h4><i class="fa-solid fa-circle-check" style="color:var(--accent-emerald);"></i> Fully Recognized Directory Patterns</h4>
+                                <ul class="rules-list" style="margin-top: 12px;">
+                                    <li>
+                                        <div class="rule-icon"><i class="fa-solid fa-folder"></i></div>
+                                        <div>
+                                            <strong>NeetCode Standard Pattern:</strong>
+                                            <p><code>Data Structures &amp; Algorithms/two-sum/submission-0.py</code></p>
+                                        </div>
+                                    </li>
+                                    <li>
+                                        <div class="rule-icon"><i class="fa-solid fa-folder"></i></div>
+                                        <div>
+                                            <strong>Slug Folder Pattern:</strong>
+                                            <p><code>two-sum/solution.py</code> or <code>contains-duplicate/solution.cpp</code></p>
+                                        </div>
+                                    </li>
+                                    <li>
+                                        <div class="rule-icon"><i class="fa-solid fa-folder"></i></div>
+                                        <div>
+                                            <strong>Numbered Prefix Pattern:</strong>
+                                            <p><code>01-two-sum/solve.java</code> or <code>1-two-sum/solution.ts</code></p>
+                                        </div>
+                                    </li>
+                                    <li>
+                                        <div class="rule-icon"><i class="fa-solid fa-folder"></i></div>
+                                        <div>
+                                            <strong>Topic Category Folders:</strong>
+                                            <p><code>Arrays &amp; Hashing/two_sum.py</code> or <code>Two Pointers/valid_palindrome.py</code></p>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div class="glass-panel">
+                                <h4><i class="fa-solid fa-code"></i> Supported Programming Languages</h4>
+                                <div class="multiplier-grid" style="margin-top: 12px;">
+                                    <div class="mult-item"><span class="mult-val">Python</span><span class="mult-label">.py</span></div>
+                                    <div class="mult-item"><span class="mult-val">C++</span><span class="mult-label">.cpp / .cc</span></div>
+                                    <div class="mult-item"><span class="mult-val">Java</span><span class="mult-label">.java</span></div>
+                                    <div class="mult-item"><span class="mult-val">TypeScript</span><span class="mult-label">.ts</span></div>
+                                    <div class="mult-item"><span class="mult-val">JavaScript</span><span class="mult-label">.js</span></div>
+                                    <div class="mult-item"><span class="mult-val">Go</span><span class="mult-label">.go</span></div>
+                                    <div class="mult-item"><span class="mult-val">Rust</span><span class="mult-label">.rs</span></div>
+                                    <div class="mult-item"><span class="mult-val">C#</span><span class="mult-label">.cs</span></div>
+                                    <div class="mult-item"><span class="mult-val">C</span><span class="mult-label">.c</span></div>
+                                </div>
+
+                                <div class="notice-card" style="margin-top: 18px;">
+                                    <i class="fa-solid fa-star" style="color:var(--accent-amber);"></i>
+                                    <div>
+                                        <strong>Polyglot Bonus (+5%):</strong>
+                                        <p>Solving problems in 2 or more programming languages (e.g. Python + C++) unlocks the permanent <strong>+5% Polyglot Multiplier</strong>!</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Security Best Practices Callout -->
+                        <div class="security-advisory-box" style="margin-top: 24px;">
+                            <div class="advisory-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                            <div class="advisory-content">
+                                <h4>Security Best Practices for Browser Extensions &amp; GitHub Sync</h4>
+                                <ul>
+                                    <li><strong>Never grant full account write access:</strong> When generating GitHub Personal Access Tokens (PATs), only grant <code>Contents: Read &amp; Write</code> on the specific repository you want to sync.</li>
+                                    <li><strong>Never enter your primary GitHub password:</strong> Trusted extensions use GitHub OAuth or Personal Access Tokens; they never require passwords.</li>
+                                    <li><strong>Audit your commits:</strong> Check that your repository does not contain <code>.env</code> files, cookies, or personal authorization keys.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: GITHUB & DSA SETUP GUIDE -->
+            <section id="tab-playbook" class="tab-pane" role="tabpanel" aria-labelledby="tab-btn-playbook">
+                <div class="pane-header">
+                    <div class="pane-title">
+                        <h2><i class="fa-solid fa-book-open" style="color:var(--accent-primary);"></i> DSA &amp; GitHub Setup Guide</h2>
+                        <p>Complete roadmap for repository setup, automated sync extensions, video walkthroughs, and Git command references.</p>
+                    </div>
+                </div>
+
+                <!-- Setup Guide Sub-tabs -->
+                <div class="playbook-nav pill-nav" role="tablist" aria-label="Setup guide sections">
+                    <button class="pill-btn active" data-subtab="getting-started" role="tab"><i class="fa-solid fa-rocket"></i> 1. Setup &amp; Onboarding</button>
+                    <button class="pill-btn" data-subtab="videos" role="tab"><i class="fa-brands fa-youtube"></i> 2. Video Tutorials</button>
+                    <button class="pill-btn" data-subtab="workflow-comparison" role="tab"><i class="fa-solid fa-code-compare"></i> 3. Sync Tools vs Git CLI</button>
+                    <button class="pill-btn" data-subtab="manual-cheatsheet" role="tab"><i class="fa-solid fa-terminal"></i> 4. Git Commands Cheatsheet</button>
+                </div>
+
+                <!-- SUBSECTION 1: Getting Started -->
+                <div id="subtab-getting-started" class="playbook-section active" role="tabpanel">
+                    <div class="grid-2col">
+                        <div class="glass-panel">
+                            <h3><i class="fa-solid fa-compass"></i> Step-by-Step Onboarding to GitHub</h3>
+                            <div class="guide-steps-list">
+                                <div class="guide-step-item">
+                                    <span class="step-badge">1</span>
+                                    <div>
+                                        <h4>Install Git &amp; Configure Identity</h4>
+                                        <p>Download Git from <a href="https://git-scm.com/" target="_blank" rel="noopener noreferrer">git-scm.com</a>. Open your terminal or PowerShell and set your global identity:</p>
+                                        <pre class="code-box"><code>git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"</code></pre>
+                                    </div>
+                                </div>
+                                <div class="guide-step-item">
+                                    <span class="step-badge">2</span>
+                                    <div>
+                                        <h4>Create Your Public GitHub Repository</h4>
+                                        <p>Create a repository named <code>neetcode-submissions</code> or <code>dsa-challenge</code>. Set visibility to <strong>Public</strong> and initialize with a <code>README.md</code>.</p>
+                                    </div>
+                                </div>
+                                <div class="guide-step-item">
+                                    <span class="step-badge">3</span>
+                                    <div>
+                                        <h4>Choose Your Primary DSA Language</h4>
+                                        <p>Recommended: <strong>Python</strong> (fast syntax, built-in heaps/dicts), <strong>C++</strong> (fast execution, STL), or <strong>Java</strong> (enterprise standard). Stick to one language initially for pattern mastery.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel">
+                            <h3><i class="fa-solid fa-cubes"></i> Choosing Your DSA Practice Platform</h3>
+                            <div class="platform-cards">
+                                <div class="platform-card highlight">
+                                    <div class="platform-header">
+                                        <span class="platform-name"><i class="fa-solid fa-bolt"></i> NeetCode.io</span>
+                                        <span class="platform-badge">Recommended</span>
+                                    </div>
+                                    <p>Curated 150 &amp; 75 problem roadmaps categorized strictly by algorithmic pattern (Two Pointers, Sliding Window, Trees, DP). Built-in video explanations and direct 1-click GitHub connection.</p>
+                                </div>
+                                <div class="platform-card">
+                                    <div class="platform-header">
+                                        <span class="platform-name"><i class="fa-solid fa-code"></i> LeetCode</span>
+                                        <span class="platform-badge">Industry Standard</span>
+                                    </div>
+                                    <p>Massive 3,000+ problem catalog, company-tagged questions (Google, Amazon, Meta), active discuss forum, and weekly live contests. Use Chrome extensions like LeetSync to sync accepted solutions.</p>
+                                </div>
+                                <div class="platform-card">
+                                    <div class="platform-header">
+                                        <span class="platform-name"><i class="fa-solid fa-trophy"></i> Codeforces / AtCoder</span>
+                                        <span class="platform-badge">Competitive</span>
+                                    </div>
+                                    <p>Best for competitive programming, advanced math, segment trees, and speed under strict contest timers. Great for ICPC prep.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUBSECTION 2: Curated YouTube Videos -->
+                <div id="subtab-videos" class="playbook-section hidden" role="tabpanel">
+                    <div class="video-grid">
+                        <!-- Video Card 1 -->
+                        <div class="glass-panel video-card">
+                            <div class="video-embed-wrapper">
+                                <iframe src="https://www.youtube-nocookie.com/embed/RGOj5yH7evk"
+                                        title="Git and GitHub for Beginners - Crash Course by freeCodeCamp"
+                                        frameborder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowfullscreen
+                                        loading="lazy"></iframe>
+                            </div>
+                            <div class="video-details">
+                                <span class="video-tag">Foundation</span>
+                                <h4>Git and GitHub for Beginners — Full Crash Course</h4>
+                                <p class="video-channel">freeCodeCamp.org</p>
+                                <ul class="video-timestamps">
+                                    <li><code>00:00</code> What is Version Control &amp; Git</li>
+                                    <li><code>08:15</code> git init, staging, commit workflow</li>
+                                    <li><code>22:40</code> Linking local repo to GitHub origin</li>
+                                    <li><code>38:10</code> git push, git pull &amp; branching</li>
+                                </ul>
+                                <a href="https://www.youtube.com/watch?v=RGOj5yH7evk" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">
+                                    <i class="fa-brands fa-youtube"></i> Watch on YouTube
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Video Card 2 -->
+                        <div class="glass-panel video-card">
+                            <div class="video-embed-wrapper">
+                                <iframe src="https://www.youtube-nocookie.com/embed/KLlXCFG5TnA"
+                                        title="How to Practice LeetCode the Right Way — NeetCode"
+                                        frameborder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowfullscreen
+                                        loading="lazy"></iframe>
+                            </div>
+                            <div class="video-details">
+                                <span class="video-tag">Strategy</span>
+                                <h4>How to Actually Practice LeetCode &amp; NeetCode</h4>
+                                <p class="video-channel">NeetCode</p>
+                                <ul class="video-timestamps">
+                                    <li><code>00:00</code> The Fatal Flaw: Solving Random Questions</li>
+                                    <li><code>03:30</code> Pattern Classification (Blind 75 vs NeetCode 150)</li>
+                                    <li><code>07:45</code> The 25-minute rule before checking hints</li>
+                                    <li><code>11:20</code> Building Long-Term Consistency</li>
+                                </ul>
+                                <a href="https://www.youtube.com/watch?v=KLlXCFG5TnA" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">
+                                    <i class="fa-brands fa-youtube"></i> Watch on YouTube
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Video Card 3 -->
+                        <div class="glass-panel video-card">
+                            <div class="video-embed-wrapper">
+                                <iframe src="https://www.youtube-nocookie.com/embed/USjZcfj8yxE"
+                                        title="Git Workflow — Stage, Commit and Push by Kevin Stratvert"
+                                        frameborder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowfullscreen
+                                        loading="lazy"></iframe>
+                            </div>
+                            <div class="video-details">
+                                <span class="video-tag">Git Pro Skills</span>
+                                <h4>Git Workflow: Stage, Commit &amp; Push Explained Simply</h4>
+                                <p class="video-channel">Kevin Stratvert</p>
+                                <ul class="video-timestamps">
+                                    <li><code>01:10</code> Understanding the 3 Stages of Git</li>
+                                    <li><code>04:20</code> When to stage (git add) vs commit</li>
+                                    <li><code>08:15</code> Writing semantic commit messages</li>
+                                    <li><code>12:00</code> Pushing and verifying on GitHub</li>
+                                </ul>
+                                <a href="https://www.youtube.com/watch?v=USjZcfj8yxE" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">
+                                    <i class="fa-brands fa-youtube"></i> Watch on YouTube
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Video Card 4 -->
+                        <div class="glass-panel video-card">
+                            <div class="video-embed-wrapper">
+                                <iframe src="https://www.youtube-nocookie.com/embed/PmsKGwH_p_w"
+                                        title="Sync LeetCode solutions to GitHub automatically"
+                                        frameborder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowfullscreen
+                                        loading="lazy"></iframe>
+                            </div>
+                            <div class="video-details">
+                                <span class="video-tag">Automation</span>
+                                <h4>Sync LeetCode &amp; NeetCode Solutions to GitHub Automatically</h4>
+                                <p class="video-channel">Community Guide</p>
+                                <ul class="video-timestamps">
+                                    <li><code>00:30</code> Installing LeetSync / LeetHub extension</li>
+                                    <li><code>02:45</code> Authorizing GitHub OAuth access token</li>
+                                    <li><code>05:10</code> Submitting code &amp; verifying auto-commit</li>
+                                    <li><code>08:00</code> Linking with NeetCode.io profile</li>
+                                </ul>
+                                <a href="https://www.youtube.com/watch?v=PmsKGwH_p_w" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">
+                                    <i class="fa-brands fa-youtube"></i> Watch on YouTube
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUBSECTION 3: Workflow Comparison -->
+                <div id="subtab-workflow-comparison" class="playbook-section hidden" role="tabpanel">
+                    <div class="glass-panel">
+                        <div class="comparison-header">
+                            <h3><i class="fa-solid fa-code-compare"></i> Automated Connection vs Manual Git: When to Use Which?</h3>
+                            <p>Understand the engineering trade-offs between automated synchronization and manual Git commits.</p>
+                        </div>
+
+                        <div class="comparison-grid">
+                            <!-- Column 1: NeetCode Automated -->
+                            <div class="workflow-card">
+                                <div class="workflow-badge auto"><i class="fa-solid fa-bolt"></i> NeetCode Automated Sync</div>
+                                <h4>NeetCode.io Direct GitHub Integration</h4>
+                                <p class="workflow-desc">Connects your NeetCode account directly to a designated GitHub repository via GitHub OAuth.</p>
+
+                                <div class="workflow-meta">
+                                    <h5><i class="fa-solid fa-circle-check" style="color:var(--accent-emerald);"></i> When to Use:</h5>
+                                    <ul>
+                                        <li>You are focusing 100% on solving problems with <strong>zero setup friction</strong>.</li>
+                                        <li>You want every accepted run recorded automatically without switching away from the browser.</li>
+                                        <li>You practice consistently every day and want automatic daily timestamps.</li>
+                                    </ul>
+
+                                    <h5><i class="fa-solid fa-triangle-exclamation" style="color:var(--accent-amber);"></i> Caveats:</h5>
+                                    <ul>
+                                        <li>Creates separate files for each attempt (<code>submission-0.py</code>, <code>submission-4.py</code>).</li>
+                                        <li>Commit messages are generic (e.g. <code>Add: two-integer-sum - submission-0</code>).</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <!-- Column 2: LeetCode Extension -->
+                            <div class="workflow-card">
+                                <div class="workflow-badge extension"><i class="fa-solid fa-puzzle-piece"></i> LeetCode Extension Sync</div>
+                                <h4>LeetSync / LeetHub v2 Browser Extension</h4>
+                                <p class="workflow-desc">A Chrome/Firefox extension that intercepts 'Accepted' responses on LeetCode and commits to your repo.</p>
+
+                                <div class="workflow-meta">
+                                    <h5><i class="fa-solid fa-circle-check" style="color:var(--accent-emerald);"></i> When to Use:</h5>
+                                    <ul>
+                                        <li>You solve questions directly on LeetCode web editor.</li>
+                                        <li>You want problem statements and difficulty automatically packaged into a <code>README.md</code>.</li>
+                                        <li>Ideal for quick contest submissions and daily LeetCode challenges.</li>
+                                    </ul>
+
+                                    <h5><i class="fa-solid fa-triangle-exclamation" style="color:var(--accent-amber);"></i> Caveats:</h5>
+                                    <ul>
+                                        <li>Requires third-party browser extension permissions.</li>
+                                        <li>Can generate burst commits that get penalized if you submit 15 problems in 1 hour.</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <!-- Column 3: Manual Workflow -->
+                            <div class="workflow-card highlighted">
+                                <div class="workflow-badge manual"><i class="fa-solid fa-terminal"></i> Manual Git Workflow</div>
+                                <h4>Manual Stage, Commit &amp; Push</h4>
+                                <p class="workflow-desc">Solving locally in VS Code / IDE and using standard Git CLI commands: <code>git add</code>, <code>git commit</code>, <code>git push</code>.</p>
+
+                                <div class="workflow-meta">
+                                    <h5><i class="fa-solid fa-circle-check" style="color:var(--accent-emerald);"></i> When to Use:</h5>
+                                    <ul>
+                                        <li><strong>Building an Interview Portfolio:</strong> Clean directory structure (e.g., <code>Arrays/</code>, <code>DynamicProgramming/</code>) that looks professional to recruiters.</li>
+                                        <li><strong>Writing Explanations &amp; Big-O Notes:</strong> Documenting time/space complexity, intuition, and edge cases.</li>
+                                        <li><strong>Multi-Language Solutions:</strong> Providing both Python and C++ implementations earns the <strong>+5% Polyglot Bonus</strong>!</li>
+                                        <li><strong>Highest Holistic Score:</strong> Better documentation and structured commits maximize the Arena score formula!</li>
+                                    </ul>
+
+                                    <h5><i class="fa-solid fa-circle-info" style="color:var(--accent-cyan);"></i> Recommendation:</h5>
+                                    <p>Use automated sync for daily speed, but maintain manual structured solutions for your top 50 favorite interview problems!</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Side by Side Feature Matrix Table -->
+                        <div class="table-responsive" style="margin-top: 28px;">
+                            <table class="data-table" aria-label="Workflow comparison matrix">
+                                <thead>
+                                    <tr>
+                                        <th>Evaluation Dimension</th>
+                                        <th>NeetCode Auto-Sync</th>
+                                        <th>LeetCode Extension</th>
+                                        <th>Manual Git CLI</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Setup Effort</strong></td>
+                                        <td><span class="score-badge badge-easy">1 Minute</span></td>
+                                        <td><span class="score-badge badge-easy">2 Minutes</span></td>
+                                        <td><span class="score-badge badge-medium">5 Minutes</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Folder Organization</strong></td>
+                                        <td>Standardized (by problem slug)</td>
+                                        <td>Standardized (by problem number)</td>
+                                        <td><span class="score-badge badge-hard">Custom &amp; Pattern-Based</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Explanation &amp; Big-O Notes</strong></td>
+                                        <td>Limited to code comments</td>
+                                        <td>Basic LeetCode problem copy</td>
+                                        <td><span class="score-badge badge-easy">Deep Personal Notes &amp; Proofs</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Multi-Language Polyglot</strong></td>
+                                        <td>Single active tab</td>
+                                        <td>Single active tab</td>
+                                        <td><span class="score-badge badge-easy">Full Polyglot Support</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Portfolio Presentation</strong></td>
+                                        <td>Raw submission dump</td>
+                                        <td>Automated repository</td>
+                                        <td><span class="score-badge badge-hard">FAANG Interview Ready</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Arena Score Impact</strong></td>
+                                        <td>High Consistency</td>
+                                        <td>High Problem Count</td>
+                                        <td><span class="score-badge badge-easy">Maximum Holistic Multipliers</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUBSECTION 4: Manual Git Cheatsheet -->
+                <div id="subtab-manual-cheatsheet" class="playbook-section hidden" role="tabpanel">
+                    <div class="glass-panel">
+                        <h3><i class="fa-solid fa-terminal"></i> Step-by-Step Manual Git Command Cheatsheet</h3>
+                        <p>Follow these exact 4 steps each day when solving a problem locally:</p>
+
+                        <div class="cheatsheet-steps">
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 1</div>
+                                <h4>Inspect Your Changes</h4>
+                                <pre class="code-box"><code>git status</code></pre>
+                                <p class="text-muted">Shows which files were created or modified in your workspace.</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 2</div>
+                                <h4>Stage Your Solved Problem File</h4>
+                                <pre class="code-box"><code>git add 01-arrays/two-sum.py
+# Or stage the entire problem folder:
+git add 01-arrays/two-sum/</code></pre>
+                                <p class="text-muted">Moves the file into the Git staging area ready for commit.</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 3</div>
+                                <h4>Commit with Semantic Convention &amp; Complexity</h4>
+                                <pre class="code-box"><code>git commit -m "feat(arrays): Two Sum - Easy [O(N) Time, O(N) Space]"</code></pre>
+                                <p class="text-muted">Creates a permanent commit with timestamp and difficulty annotation.</p>
+                            </div>
+
+                            <div class="cheatsheet-card">
+                                <div class="step-num">Step 4</div>
+                                <h4>Push to GitHub</h4>
+                                <pre class="code-box"><code>git push origin main</code></pre>
+                                <p class="text-muted">Uploads your commit to GitHub. Then submit or refresh your repo in the Arena!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 4: STEPS & NOTES JOURNAL -->
+            <section id="tab-steps" class="tab-pane" role="tabpanel" aria-labelledby="tab-btn-steps">
+                <div class="pane-header">
+                    <div class="pane-title">
+                        <h2>Personal Steps Tracker &amp; Engineering Journal</h2>
+                        <p>Write down your personal setup steps, track progress checklist, and keep notes on patterns and approaches.</p>
+                    </div>
+                    <div class="pane-actions">
+                        <button class="btn btn-primary" id="save-notes-btn">
+                            <i class="fa-solid fa-floppy-disk"></i> Save Notes
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid-2col">
+                    <!-- Interactive Setup Checklist -->
+                    <div class="glass-panel">
+                        <div class="checklist-header">
+                            <h3><i class="fa-solid fa-list-check"></i> Onboarding Checklist</h3>
+                            <span class="checklist-progress" id="checklist-progress-text">0 / 6 Completed</span>
+                        </div>
+                        <div class="progress-bar-container" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar-fill" id="checklist-progress-bar" style="width: 0%;"></div>
+                        </div>
+
+                        <div class="checklist-items" id="checklist-items">
+                            <label class="check-item">
+                                <input type="checkbox" id="chk-git-install" data-idx="0">
+                                <span>Install Git and configure <code>user.name</code> and <code>user.email</code> globally</span>
+                            </label>
+                            <label class="check-item">
+                                <input type="checkbox" id="chk-repo-create" data-idx="1">
+                                <span>Create a public GitHub repository (e.g. <code>neetcode-submissions</code>)</span>
+                            </label>
+                            <label class="check-item">
+                                <input type="checkbox" id="chk-lang-select" data-idx="2">
+                                <span>Select primary DSA programming language (Python / C++ / Java)</span>
+                            </label>
+                            <label class="check-item">
+                                <input type="checkbox" id="chk-platform-choose" data-idx="3">
+                                <span>Set up NeetCode.io account and configure GitHub OAuth auto-sync</span>
+                            </label>
+                            <label class="check-item">
+                                <input type="checkbox" id="chk-first-solve" data-idx="4">
+                                <span>Solve Day 1 problem (e.g. Two Sum) and confirm commit appeared on GitHub</span>
+                            </label>
+                            <label class="check-item">
+                                <input type="checkbox" id="chk-arena-submit" data-idx="5">
+                                <span>Submit repository to DSA Challenge Arena and view holistic score!</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Custom Steps & Notes Workspace -->
+                    <div class="glass-panel">
+                        <div class="notes-header">
+                            <h3><i class="fa-solid fa-pen-to-square"></i> My Setup Steps &amp; Problem Notes</h3>
+                            <span class="save-status" id="save-status">Auto-saved locally</span>
+                        </div>
+                        <p class="notes-hint">Write down your personal daily steps, target problem list, algorithm template snippets, or Big-O cheat sheets. Synced to your Google profile.</p>
+
+                        <textarea id="user-notes-textarea" class="notes-textarea"
+                            placeholder="## My DSA Challenge Roadmap&#10;&#10;1. Daily Target: 1-2 problems consistently.&#10;2. Week 1 Focus: Arrays &amp; Hashing (Two Sum, Valid Anagram, Group Anagrams)&#10;3. Approach: Write brute-force O(N^2) first, then optimize to O(N) hash map.&#10;4. Git Commit Rule: Always include time &amp; space complexity in commit message!"
+                            aria-label="Personal notes and steps"></textarea>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Repository Breakdown Modal -->
+    <div id="breakdown-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-repo-name">
+        <div class="modal-card glass-panel">
+            <div class="modal-header">
+                <div>
+                    <h3 id="modal-repo-name">Repository Analysis Breakdown</h3>
+                    <p id="modal-repo-url" class="text-muted"></p>
+                </div>
+                <button class="modal-close-btn" id="modal-close-btn" aria-label="Close modal">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body-content">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+    <!-- Scripts -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

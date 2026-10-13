@@ -1,0 +1,32 @@
+# ─── Python bytecode & virtual environments ───────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.env.local
+
+# ─── Local database (use cloud storage or persistent disk in production) ──
+app.db
+
+# ─── Environment secrets (NEVER commit these) ─────────────────────────────
+.env
+
+# ─── Logs (generated at runtime) ─────────────────────────────────────────
+logs/
+
+# ─── IDE & OS files ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# ─── Git metadata ─────────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ─── Test & Dev files ─────────────────────────────────────────────────────
+*.test.*
+tests/
