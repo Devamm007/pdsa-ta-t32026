@@ -312,25 +312,115 @@ PROBLEM_CATALOG: Dict[str, Tuple[str, str]] = {
     "number-of-1-bits": ("Easy", "Bit Manipulation"),
     "counting-bits": ("Easy", "Bit Manipulation"),
     "reverse-bits": ("Easy", "Bit Manipulation"),
+    # NeetCode & LeetCode common catalog additions
+    "design-hashmap": ("Easy", "Arrays & Hashing"),
+    "design-hashset": ("Easy", "Arrays & Hashing"),
+    "range-sum-query-2d-immutable": ("Medium", "Arrays & Hashing"),
+    "range-sum-query-immutable": ("Easy", "Arrays & Hashing"),
+    "best-time-to-buy-and-sell-stock-ii": ("Medium", "Greedy"),
+    "first-missing-positive": ("Hard", "Arrays & Hashing"),
+    "majority-element": ("Easy", "Arrays & Hashing"),
+    "majority-element-ii": ("Medium", "Arrays & Hashing"),
+    "remove-element": ("Easy", "Arrays & Hashing"),
+    "reverse-string": ("Easy", "Two Pointers"),
+    "sort-an-array": ("Medium", "Arrays & Hashing"),
+    "sort-colors": ("Medium", "Two Pointers"),
+    "search-insert-position": ("Easy", "Binary Search"),
+    "guess-number-higher-or-lower": ("Easy", "Binary Search"),
+    "ones-and-zeroes": ("Medium", "Dynamic Programming"),
+    "ransom-note": ("Easy", "Arrays & Hashing"),
+    "intersection-of-two-linked-lists": ("Easy", "Linked List"),
+    "palindrome-linked-list": ("Easy", "Linked List"),
+    "remove-linked-list-elements": ("Easy", "Linked List"),
+    "middle-of-the-linked-list": ("Easy", "Linked List"),
+    "move-zeroes": ("Easy", "Two Pointers"),
+    "squares-of-a-sorted-array": ("Easy", "Two Pointers"),
+    "valid-palindrome-ii": ("Easy", "Two Pointers"),
+    "find-all-numbers-disappeared-in-an-array": ("Easy", "Arrays & Hashing"),
+    "design-twitter": ("Medium", "Heap"),
+    "design-underground-system": ("Medium", "Design"),
+    "lfu-cache": ("Hard", "Linked List"),
+    "implement-queue-using-stacks": ("Easy", "Stack"),
+    "implement-stack-using-queues": ("Easy", "Stack"),
+    "min-cost-to-connect-all-points": ("Medium", "Graphs"),
+    "network-delay-time": ("Medium", "Graphs"),
+    "swim-in-rising-water": ("Hard", "Graphs"),
+    "alien-dictionary": ("Hard", "Graphs"),
+    "cheapest-flights-within-k-stops": ("Medium", "Graphs"),
+    "reconstruct-itinerary": ("Hard", "Graphs"),
+    "non-overlapping-intervals": ("Medium", "Intervals"),
+    "meeting-rooms": ("Easy", "Intervals"),
+    "meeting-rooms-ii": ("Medium", "Intervals"),
+    "minimum-interval-to-include-each-query": ("Hard", "Intervals"),
+    "gas-station": ("Medium", "Greedy"),
+    "hand-of-straights": ("Medium", "Greedy"),
+    "merge-triplets-to-form-target-triplet": ("Medium", "Greedy"),
+    "partition-labels": ("Medium", "Greedy"),
+    "valid-parenthesis-string": ("Medium", "Greedy"),
+    "longest-turbulent-subarray": ("Medium", "Sliding Window"),
+    "frequency-of-the-most-frequent-element": ("Medium", "Sliding Window"),
+    "fruit-into-baskets": ("Medium", "Sliding Window"),
 }
 
 CANONICAL_ALIASES = {
     "0001-two-sum": "two-sum",
     "0002-add-two-numbers": "add-two-numbers",
     "0003-longest-substring-without-repeating-characters": "longest-substring-without-repeating-characters",
+    "0014-longest-common-prefix": "longest-common-prefix",
     "0020-valid-parentheses": "valid-parentheses",
     "0021-merge-two-sorted-lists": "merge-two-sorted-lists",
     "0023-merge-k-sorted-lists": "merge-k-sorted-lists",
+    "0027-remove-element": "remove-element",
     "0033-search-in-rotated-sorted-array": "search-in-rotated-sorted-array",
+    "0041-first-missing-positive": "first-missing-positive",
     "0042-trapping-rain-water": "trapping-rain-water",
+    "0049-group-anagrams": "group-anagrams",
     "0070-climbing-stairs": "climbing-stairs",
+    "0075-sort-colors": "sort-colors",
     "0121-best-time-to-buy-and-sell-stock": "best-time-to-buy-and-sell-stock",
+    "0122-best-time-to-buy-and-sell-stock-ii": "best-time-to-buy-and-sell-stock-ii",
     "0125-valid-palindrome": "valid-palindrome",
     "0141-linked-list-cycle": "linked-list-cycle",
+    "0169-majority-element": "majority-element",
     "0206-reverse-linked-list": "reverse-linked-list",
     "0217-contains-duplicate": "contains-duplicate",
+    "0229-majority-element-ii": "majority-element-ii",
     "0242-valid-anagram": "valid-anagram",
+    "0303-range-sum-query-immutable": "range-sum-query-immutable",
+    "0304-range-sum-query-2d-immutable": "range-sum-query-2d-immutable",
+    "0344-reverse-string": "reverse-string",
+    "0474-ones-and-zeroes": "ones-and-zeroes",
+    "0705-design-hashset": "design-hashset",
+    "0706-design-hashmap": "design-hashmap",
+    "0912-sort-an-array": "sort-an-array",
+    "1929-concatenation-of-array": "concatenation-of-array",
 }
+
+def format_languages_string(langs: Any) -> str:
+    """Format and normalize language values, ensuring no single-character comma-split artifacts."""
+    if not langs or langs == "None":
+        return "None"
+    if isinstance(langs, (list, set, tuple)):
+        items = [str(x).strip() for x in langs if str(x).strip()]
+        return ", ".join(sorted(items)) if items else "None"
+    s = str(langs).strip()
+    parts = [p.strip() for p in s.split(",") if p.strip()]
+    if len(parts) > 1 and all(len(p) == 1 for p in parts):
+        return "".join(parts)
+    return s
+
+def format_topics_string(topics: Any) -> str:
+    """Format and normalize topics values, ensuring no comma-split artifacts."""
+    if not topics or topics == "None":
+        return "None"
+    if isinstance(topics, (list, set, tuple)):
+        items = [str(x).strip() for x in topics if str(x).strip()]
+        return ", ".join(sorted(items)) if items else "None"
+    s = str(topics).strip()
+    if ", ," in s or (len(s.split(",")) > 5 and all(len(p.strip()) <= 1 for p in s.split(",")[:5])):
+        cleaned = "".join([c for c in s.split(",")])
+        return ", ".join([t.strip() for t in cleaned.split(",") if t.strip()])
+    return s
 
 def is_genuine_code_file(filepath: str, ext: str) -> bool:
     """Validate that the file contains actual runnable DSA code."""
@@ -439,6 +529,44 @@ def classify_problem_with_heuristics(code_text: str, slug: str, file_path_str: s
         "analysis_source": "heuristic"
     }
 
+def classify_problem_with_gemini(code_text: str, slug: str, file_path_str: str) -> Optional[Dict[str, str]]:
+    """AI-assisted classification using Gemini API with fast graceful fallback to heuristics."""
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not gemini_key:
+        return None
+    try:
+        clean_name = slug.replace("-", " ").replace("_", " ").title()
+        prompt = (
+            f"You are a DSA problem classifier. Problem slug: '{slug}'. File: '{Path(file_path_str).name}'.\n"
+            f"Code snippet:\n{code_text[:1200]}\n\n"
+            "Return valid JSON only with exact keys: "
+            '{"problem_name": string, "difficulty": "Easy"|"Medium"|"Hard", "topic": string, '
+            '"time_complexity": string, "space_complexity": string}'
+        )
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"response_mime_type": "application/json"}
+        }
+        with httpx.Client(timeout=3.5) as client:
+            resp = client.post(url, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                parsed = json.loads(text)
+                return {
+                    "problem_slug": slug,
+                    "problem_name": parsed.get("problem_name") or clean_name,
+                    "difficulty": parsed.get("difficulty", "Medium"),
+                    "topic": parsed.get("topic", "General DSA"),
+                    "time_complexity": parsed.get("time_complexity", "O(N)"),
+                    "space_complexity": parsed.get("space_complexity", "O(1)"),
+                    "analysis_source": "gemini-ai"
+                }
+    except Exception as e:
+        logger.debug(f"Gemini AI classification fallback for {slug}: {e}")
+    return None
+
 # ---------------------------------------------------------------------------
 # DSA Candidate Identification & Filtering
 # ---------------------------------------------------------------------------
@@ -461,16 +589,38 @@ KNOWN_DSA_DIR_KEYWORDS = {
     "geeksforgeeks", "codewars", "interview-prep", "interview"
 }
 
+STATUS_SUBDIRS = {
+    "accepted", "wrong answer", "time limit exceeded", "memory limit exceeded",
+    "runtime error", "compile error", "submissions"
+}
+
+GENERIC_SUBMISSION_FILENAMES = {
+    "submission", "solution", "solve", "sol", "code", "main", "accepted", "ans"
+}
+
 DSA_SIGNATURE_KEYWORDS = [
-    "class solution", "def twosum", "listnode", "treenode", "leetcode.com",
-    "neetcode.io", "# leetcode", "// leetcode", "class minstack", "class lrucache",
-    "#include <bits/stdc++.h>", "ios_base::sync_with_stdio", "time complexity:",
-    "space complexity:", "constraints:"
+    "class solution", "impl solution", "def twosum", "listnode", "treenode",
+    "leetcode.com", "neetcode.io", "# leetcode", "// leetcode", "/* leetcode",
+    "leethub", "class minstack", "class lrucache", "class lfucache",
+    "class myhashmap", "class myhashset", "class nummatrix", "class trie", "class worddictionary",
+    "class medianfinder", "class randomizedset", "class twitter", "class kthlargest",
+    "class stockspanner", "class snapshotarray", "class timemap", "class myqueue",
+    "class mystack", "class mycircularqueue", "class mycirculardeque",
+    "class browserhistory", "class undergroundsystem", "class freqstack",
+    "class customstack", "class bstiterator", "class peekingiterator", "class codec",
+    "instantiated and called as such", "will be instantiated and called as such",
+    "definition for singly-linked list", "definition for a binary tree node",
+    "definition for singly linked list", "definition for binary tree",
+    "definition for a node", "#include <bits/stdc++.h>", "ios_base::sync_with_stdio",
+    "time complexity:", "space complexity:", "constraints:"
 ]
 
 CONTAINER_DIRS = {
     "leetcode", "neetcode", "blind75", "striver", "problems", "solutions",
     "algorithms", "algo", "data-structures", "data_structures", "dsa",
+    "data-structures-and-algorithms", "data structures & algorithms",
+    "data structures and algorithms", "leetcode-solutions", "leetcode-problems",
+    "neetcode-solutions", "top-interview-150", "leetcode-75", "blind-75",
     "codeforces", "hackerrank", "competitive-programming", "cp", "gfg",
     "geeksforgeeks", "codewars", "interview-prep", "interview", "easy",
     "medium", "hard", "src", "cpp", "python", "java", "javascript", "go",
@@ -481,22 +631,6 @@ CONTAINER_DIRS = {
     "dataset", "configs", "config", "docs", "doc", "static", "public"
 }
 
-def is_dsa_candidate(
-    file_path: str,
-    stem: str,
-    parent_dir: str,
-    ext: str,
-    repo_root_name: str = ""
-) -> Tuple[bool, str]:
-    """
-    Platform-agnostic problem slug resolver.
-    Handles:
-    - Directory-per-problem (LeetHub, LeetCode Sync, NeetCode, CP, Striver)
-    - Flat problem files
-    - Multi-language polyglot solutions
-    - Timestamped and runtime-tagged submission files
-    Returns (is_dsa, normalized_problem_slug).
-    """
 BUILD_AND_TOOL_PREFIXES = (
     "audit", "build", "compile", "gen", "lint", "test", "spec", "parse",
     "make", "check", "clean", "split", "deploy", "export", "import", "voice",
@@ -511,24 +645,35 @@ def is_dsa_candidate(
     repo_root_name: str = ""
 ) -> Tuple[bool, str]:
     """
-    Platform-agnostic problem slug resolver.
-    Strictly distinguishes genuine DSA problem solving solutions from:
-    - Educational documentation / textbooks (e.g. dsa-docs)
-    - Build, audit, generator, and tooling scripts
-    - Machine learning, web, and generic software projects
+    Platform-agnostic problem slug resolver supporting:
+    - Directory-per-problem (LeetHub, LeetCode Sync, NeetCode, CP, Striver)
+    - Status subfolders (Accepted, Wrong Answer)
+    - Flat problem files
+    - LeetCode design problems (MyHashMap, MyHashSet, NumMatrix, LRUCache, etc.)
+    - Multi-language polyglot solutions
     Returns (is_dsa, normalized_problem_slug).
     """
+    p = Path(file_path)
     stem_lower = stem.lower()
     parent_lower = parent_dir.lower()
     repo_root_lower = repo_root_name.lower()
 
+    # Unwrap status subfolders (e.g., "Accepted", "Wrong Answer" created by LeetCode extensions)
+    if parent_lower in STATUS_SUBDIRS:
+        effective_parent = p.parent.parent.name
+    else:
+        effective_parent = parent_dir
+
+    effective_parent_lower = effective_parent.lower()
+    norm_parent = normalize_slug(effective_parent)
+
     # Reject obvious build, audit, tool, and generic scripts unless in problem catalog
     is_tool_script = (
         stem_lower in KNOWN_NON_DSA_FILENAMES
-        or any(stem_lower.startswith(p) for p in BUILD_AND_TOOL_PREFIXES)
-        or any(stem_lower.endswith(p) for p in ["check", "lint", "test", "spec", "audit"])
+        or any(stem_lower.startswith(pfx) for pfx in BUILD_AND_TOOL_PREFIXES)
+        or any(stem_lower.endswith(pfx) for pfx in ["check", "lint", "test", "spec", "audit"])
     )
-    if is_tool_script and stem_lower not in PROBLEM_CATALOG:
+    if is_tool_script and stem_lower not in PROBLEM_CATALOG and norm_parent not in PROBLEM_CATALOG:
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 head_text = f.read(2048).lower()
@@ -538,61 +683,77 @@ def is_dsa_candidate(
             return (False, "")
 
     is_parent_container = (
-        not parent_dir
-        or parent_lower == repo_root_lower
-        or parent_lower in CONTAINER_DIRS
-        or parent_lower.startswith("sub")
-        or any(parent_lower.startswith(p) for p in ["script", "tool", "asset", "input", "output", "doc", "skill", "trace"])
+        not effective_parent
+        or effective_parent_lower == repo_root_lower
+        or effective_parent_lower in CONTAINER_DIRS
+        or effective_parent_lower.startswith("sub")
+        or any(effective_parent_lower.startswith(pfx) for pfx in ["script", "tool", "asset", "input", "output", "doc", "skill", "trace"])
     )
 
-    # 1. Directory-per-problem:
-    # A directory is a genuine problem directory if:
-    # - It matches the LeetCode Problem Catalog / Aliases (e.g. "two-sum", "reverse-linked-list")
-    # - OR it has a standard numeric LeetCode prefix (e.g. "1-two-sum", "0001-two-sum", "100-same-tree")
-    # - OR it starts with "lc-", "p-", "problem-" followed by a number
-    if not is_parent_container and len(parent_dir) >= 2:
-        norm_parent = normalize_slug(parent_dir)
+    # 1. Directory-per-problem check:
+    if not is_parent_container and len(norm_parent) >= 2 and norm_parent not in KNOWN_NON_DSA_FILENAMES:
         if (
             norm_parent in PROBLEM_CATALOG
             or norm_parent in CANONICAL_ALIASES
-            or re.match(r"^\d+[\-_.]+", parent_dir)
-            or re.match(r"^(?:lc|p|problem)[-_]?\d+", parent_dir, re.IGNORECASE)
+            or re.match(r"^\d+[\-_.]+", effective_parent)
+            or re.match(r"^(?:lc|p|problem)[-_]?\d+", effective_parent, re.IGNORECASE)
         ):
-            return (True, norm_parent)
+            return (True, CANONICAL_ALIASES.get(norm_parent, norm_parent))
+
+        # Check if file inside is a standard LeetCode / NeetCode / LeetHub submission file
+        is_submission_file = (
+            stem_lower in GENERIC_SUBMISSION_FILENAMES
+            or any(stem_lower.startswith(g) for g in ["submission", "solution", "solve", "ans"])
+            or bool(re.match(r"^\d{4}-\d{2}-\d{2}", stem))
+            or bool(re.match(r"^\d{1,2}-\d{1,2}-\d{4}", stem))
+        )
+        if is_submission_file:
+            return (True, CANONICAL_ALIASES.get(norm_parent, norm_parent))
+
+        # Check if ancestor directory or repo name indicates a DSA repository
+        path_parts = [part.lower() for part in p.parts]
+        is_in_dsa_context = (
+            any(any(kw in part for kw in KNOWN_DSA_DIR_KEYWORDS) for part in path_parts[:-1])
+            or any(kw in repo_root_lower for kw in ["leetcode", "neetcode", "dsa", "algo", "blind75", "striver", "problems", "solutions"])
+        )
+        if is_in_dsa_context:
+            return (True, CANONICAL_ALIASES.get(norm_parent, norm_parent))
 
     # 2. Flat repository structure:
-    # The file stem itself defines the problem
     direct_slug = normalize_slug(stem)
     if direct_slug in PROBLEM_CATALOG or direct_slug in CANONICAL_ALIASES:
         return (True, CANONICAL_ALIASES.get(direct_slug, direct_slug))
 
     # Check numerical LeetCode pattern on stem (e.g. "0001-two-sum", "1. Two Sum")
-    # Exclude timestamp strings (e.g. "2024-01-09 13.20.47...")
-    is_timestamp = bool(re.match(r"^\d{4}-\d{2}-\d{2}", stem))
+    is_timestamp = bool(re.match(r"^\d{4}-\d{2}-\d{2}", stem)) or bool(re.match(r"^\d{1,2}-\d{1,2}-\d{4}", stem))
     if not is_timestamp:
         m_num = re.match(r"^(\d{1,4})[-_.]+(.+)$", stem)
         if m_num:
             num_slug = normalize_slug(m_num.group(2))
             if len(num_slug) >= 2 and num_slug not in KNOWN_NON_DSA_FILENAMES:
-                return (True, num_slug)
+                return (True, CANONICAL_ALIASES.get(num_slug, num_slug))
 
         m_lc = re.match(r"^(?:lc|problem|p)[-_]?(\d{1,4})[-_.]*(.*)$", stem, re.IGNORECASE)
         if m_lc:
             lc_name = normalize_slug(m_lc.group(2))
             return (True, lc_name or f"leetcode-{m_lc.group(1)}")
 
-    # 3. Content signature check (class Solution, TreeNode, ListNode, LeetCode headers)
+    # 3. Content signature check (class Solution, design classes, TreeNode, ListNode, LeetCode headers)
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            code_sample = f.read(3000).lower()
-        if any(sig in code_sample for sig in DSA_SIGNATURE_KEYWORDS):
-            slug_to_use = normalize_slug(parent_dir) if not is_parent_container else direct_slug
-            if not re.match(r"^\d{4}-\d{2}-\d{2}", slug_to_use) and len(slug_to_use) >= 2:
-                return (True, slug_to_use or "dsa-solution")
+            code_sample = f.read(3500).lower()
+        if (
+            any(sig in code_sample for sig in DSA_SIGNATURE_KEYWORDS)
+            or re.search(r"\bclass\s+my[a-z]\w*", code_sample)
+            or re.search(r"\bclass\s+nummatrix\b", code_sample)
+            or re.search(r"instantiated and called as such", code_sample)
+        ):
+            slug_to_use = norm_parent if not is_parent_container else direct_slug
+            if not is_timestamp and len(slug_to_use) >= 2 and slug_to_use not in KNOWN_NON_DSA_FILENAMES:
+                return (True, CANONICAL_ALIASES.get(slug_to_use, slug_to_use) or "dsa-solution")
     except Exception:
         pass
 
-    # If none of the above match, it is not a DSA problem solution
     return (False, "")
 
 # ---------------------------------------------------------------------------
@@ -656,7 +817,7 @@ def analyze_repo_holistic(
                     "-c", "core.hooksPath=/dev/null",
                     "-c", "core.symlinks=false",
                     "clone",
-                    "--depth", "50",
+                    "--depth", "300",
                     "--single-branch",
                     "--no-tags",
                     clean_url,
@@ -774,26 +935,28 @@ def analyze_repo_holistic(
         for file_path, slug, lang, file_sha in candidates:
             detected_languages.add(lang)
 
-            if file_sha in cached_problems_map:
+            if slug in PROBLEM_CATALOG:
+                diff, top = PROBLEM_CATALOG[slug]
+                p_info = {
+                    "problem_slug": slug,
+                    "problem_name": slug.replace("-", " ").title(),
+                    "difficulty": diff,
+                    "topic": top,
+                    "time_complexity": "O(N)" if diff == "Easy" else ("O(N log N)" if diff == "Medium" else "O(N^2)"),
+                    "space_complexity": "O(1)" if diff == "Easy" else "O(N)",
+                    "analysis_source": "catalog"
+                }
+            elif file_sha in cached_problems_map:
                 p_info = cached_problems_map[file_sha]
             else:
-                if slug in PROBLEM_CATALOG:
-                    diff, top = PROBLEM_CATALOG[slug]
-                    p_info = {
-                        "problem_slug": slug,
-                        "problem_name": slug.replace("-", " ").title(),
-                        "difficulty": diff,
-                        "topic": top,
-                        "time_complexity": "O(N)" if diff == "Easy" else ("O(N log N)" if diff == "Medium" else "O(N^2)"),
-                        "space_complexity": "O(1)" if diff == "Easy" else "O(N)",
-                        "analysis_source": "catalog"
-                    }
-                else:
-                    try:
-                        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                            code_text = f.read(5000)
-                    except Exception:
-                        code_text = ""
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        code_text = f.read(5000)
+                except Exception:
+                    code_text = ""
+                # Try AI-assisted classification with Gemini, fallback to heuristics
+                p_info = classify_problem_with_gemini(code_text, slug, file_path)
+                if not p_info:
                     p_info = classify_problem_with_heuristics(code_text, slug, file_path)
 
                 cached_problems_map[file_sha] = p_info
@@ -825,13 +988,13 @@ def analyze_repo_holistic(
 
         _notify("Parsing git commits & timeline activity...", 75)
 
-        # Step 6: Phase 2 - Git Commit Parsing (capped to recent 200 commits for speed)
+        # Step 6: Phase 2 - Git Commit Parsing (depth 300 for complete activity history)
         try:
             log_proc = subprocess.run(
-                ["git", "-C", temp_dir, "log", "-n", "200", "--pretty=format:COMMIT:%H|%ad|%s", "--name-only", "--date=short"],
+                ["git", "-C", temp_dir, "log", "-n", "300", "--pretty=format:COMMIT:%H|%ad|%s", "--name-only", "--date=short"],
                 capture_output=True,
                 text=True,
-                timeout=15,
+                timeout=25,
                 check=True
             )
         except Exception as e:
@@ -841,8 +1004,20 @@ def analyze_repo_holistic(
         new_commits_to_save: Dict[str, Dict[str, Any]] = {}
         daily_code_days: Set[str] = set()
         daily_problems_map: Dict[str, Set[str]] = {}
+
+        # Preserve previously analyzed commit dates from DB cache so past activity is never lost on refresh
+        try:
+            with get_db() as session:
+                cached_commits = session.query(AnalyzedCommit.commit_date).filter(AnalyzedCommit.repo_url == clean_url).all()
+                for (c_dt,) in cached_commits:
+                    if c_dt:
+                        daily_code_days.add(c_dt)
+        except Exception as e:
+            logger.warning(f"Could not load cached commit dates for {clean_url}: {e}")
+
         current_commit = None
-        slug_keys = list(detected_problems.keys())
+        # Sort slug keys by length descending to prevent shorter prefixes from stealing matches
+        slug_keys = sorted(detected_problems.keys(), key=len, reverse=True)
 
         for line in log_proc.stdout.split("\n"):
             line = line.strip()
@@ -861,6 +1036,15 @@ def analyze_repo_holistic(
                             "commit_message": c_msg,
                             "created_at": datetime.utcnow()
                         }
+                    # Also link commit message directly if it mentions a known problem
+                    c_msg_lower = c_msg.lower()
+                    for s in slug_keys:
+                        if s in c_msg_lower or s.replace("-", " ") in c_msg_lower:
+                            daily_code_days.add(c_date)
+                            if c_date not in daily_problems_map:
+                                daily_problems_map[c_date] = set()
+                            daily_problems_map[c_date].add(s)
+                            break
             elif current_commit:
                 ext = Path(line).suffix.lower()
                 if ext in CODE_EXTENSIONS:
@@ -869,13 +1053,26 @@ def analyze_repo_holistic(
                     if c_date not in daily_problems_map:
                         daily_problems_map[c_date] = set()
 
+                    # Directly extract candidate problem slug from file path
+                    line_path = Path(line)
+                    parent_part = line_path.parent.name.lower()
+                    if parent_part in STATUS_SUBDIRS:
+                        parent_part = line_path.parent.parent.name.lower()
+                    path_slug = normalize_slug(parent_part)
+                    stem_slug = normalize_slug(line_path.stem)
+
                     matched = None
-                    c_msg_lower = c_msg.lower()
-                    line_lower = line.lower()
-                    for s in slug_keys:
-                        if s in c_msg_lower or s in line_lower or s.replace("-", " ") in c_msg_lower:
-                            matched = s
-                            break
+                    if path_slug in detected_problems:
+                        matched = path_slug
+                    elif stem_slug in detected_problems:
+                        matched = stem_slug
+                    else:
+                        c_msg_lower = c_msg.lower()
+                        line_lower = line.lower()
+                        for s in slug_keys:
+                            if s in c_msg_lower or s in line_lower or s.replace("-", " ") in c_msg_lower:
+                                matched = s
+                                break
 
                     if matched:
                         daily_problems_map[c_date].add(matched)
@@ -963,6 +1160,12 @@ def analyze_repo_holistic(
             logger.error(f"Error persisting problems/commits cache for {clean_url}: {e}")
 
         repo_name = "/".join(clean_url.split("/")[-2:])
+        diff_points_total = round(problem_difficulty_pts, 2)
+        consistency_total = round(consistency_base, 2)
+        weighted_consistency = round(0.50 * consistency_base * active_day_mult, 2)
+        weighted_diff = round(0.50 * problem_difficulty_pts, 2)
+        raw_comp = round(raw_composite, 2)
+
         result = {
             "name": repo_name,
             "clean_url": clean_url,
@@ -972,13 +1175,32 @@ def analyze_repo_holistic(
             "easy_count": easy_count,
             "medium_count": medium_count,
             "hard_count": hard_count,
-            "languages": ", ".join(sorted(detected_languages)) or "None",
-            "topics_covered": ", ".join(sorted(topics_covered)) or "None",
+            "languages": format_languages_string(detected_languages),
+            "topics_covered": format_topics_string(topics_covered),
             "breakdown": {
                 "no_code_detected": bool(total_unique == 0),
-                "consistency_score": round(consistency_base, 2),
-                "raw_difficulty_points": round(problem_difficulty_pts, 2),
+                "consistency_score": consistency_total,
+                "raw_difficulty_points": diff_points_total,
                 "active_days": active_days,
+                "calculation_steps": {
+                    "easy_count": easy_count,
+                    "medium_count": medium_count,
+                    "hard_count": hard_count,
+                    "easy_pts": round(easy_count * 1.0, 2),
+                    "medium_pts": round(medium_count * 2.5, 2),
+                    "hard_pts": round(hard_count * 5.0, 2),
+                    "difficulty_points": diff_points_total,
+                    "consistency_base": consistency_total,
+                    "active_day_multiplier": round(active_day_mult, 2),
+                    "weighted_consistency": weighted_consistency,
+                    "weighted_difficulty": weighted_diff,
+                    "raw_composite": raw_comp,
+                    "breadth_multiplier": round(breadth_mult, 2),
+                    "topic_bonus": topic_mult,
+                    "doc_bonus": doc_mult,
+                    "polyglot_bonus": polyglot_mult,
+                    "final_score": final_score
+                },
                 "multipliers": {
                     "active_day_multiplier": round(active_day_mult, 2),
                     "breadth_multiplier": round(breadth_mult, 2),
@@ -986,7 +1208,7 @@ def analyze_repo_holistic(
                     "doc_bonus": doc_mult,
                     "polyglot_bonus": polyglot_mult
                 },
-                "problem_sample": problem_summary_list[:20]
+                "problem_sample": problem_summary_list[:250]
             }
         }
         logger.info(f"Incremental analysis complete for {clean_url}: Score={final_score}, Unique={total_unique}")
@@ -1083,6 +1305,15 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+@app.middleware("http")
+async def add_no_cache_for_static(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static") or request.url.path == "/":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 # ---------------------------------------------------------------------------
 # API Models
@@ -1433,8 +1664,8 @@ async def get_leaderboard():
                 "easy_count": r.easy_count or 0,
                 "medium_count": r.medium_count or 0,
                 "hard_count": r.hard_count or 0,
-                "languages": r.languages or "None",
-                "topics_covered": r.topics_covered or "None",
+                "languages": format_languages_string(r.languages),
+                "topics_covered": format_topics_string(r.topics_covered),
                 "breakdown": breakdown_data,
                 "updated_at": r.updated_at.strftime("%Y-%m-%d %H:%M:%S") if r.updated_at else ""
             })
@@ -1654,6 +1885,66 @@ async def unsync_repo(repo_id: int, request: Request):
         "message": f"Repository '{repo_name}' has been unsynced and removed from the active leaderboard.",
         "repo_id": repo_id
     }
+
+@app.post("/api/submissions/{repo_id}/refresh")
+async def refresh_repo(repo_id: int, request: Request):
+    """Immediately trigger incremental refresh and commit re-evaluation for a single repository."""
+    user = require_authenticated_user(request)
+    user_email = user.get("email", "").lower().strip()
+    is_admin = user_email in ADMIN_EMAILS
+
+    with get_db() as session:
+        repo = session.query(Submission).filter(Submission.id == repo_id, Submission.is_deleted == 0).first()
+        if not repo:
+            raise HTTPException(status_code=404, detail="Active repository not found.")
+
+        owner_email = (repo.submitted_by_email or "").lower().strip()
+        if not is_admin and owner_email != user_email:
+            raise HTTPException(status_code=403, detail="Permission denied. You can only refresh your own repository.")
+
+        clean_url = repo.repo_url
+        user_name = user.get("name", "User")
+
+    # Queue or run analysis job
+    job_id = f"job_{uuid.uuid4().hex[:12]}"
+    job_record = {
+        "job_id": job_id,
+        "repo_url": clean_url,
+        "submitted_by_email": user_email,
+        "submitted_by_name": user_name,
+        "status": "queued",
+        "progress_stage": "Queued for refresh",
+        "progress_percent": 5,
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat()
+    }
+    ACTIVE_JOBS[job_id] = job_record
+    asyncio.create_task(run_analysis_job(job_id, clean_url, user_email, user_name))
+
+    return {
+        "success": True,
+        "job_id": job_id,
+        "status": "queued",
+        "message": f"Refresh initiated for repository '{repo.repo_name}'.",
+        "repo_url": clean_url
+    }
+
+@app.post("/api/user/refresh-repo")
+async def refresh_user_repo(request: Request):
+    """Allow the currently logged-in user to refresh their own synced repository."""
+    user = require_authenticated_user(request)
+    user_email = user.get("email", "").lower().strip()
+
+    with get_db() as session:
+        repo = session.query(Submission)\
+            .filter(func.lower(Submission.submitted_by_email) == user_email, Submission.is_deleted == 0)\
+            .order_by(Submission.id.desc())\
+            .first()
+        if not repo:
+            raise HTTPException(status_code=404, detail="No active synced repository found for your account.")
+        repo_id = repo.id
+
+    return await refresh_repo(repo_id, request)
 
 @app.get("/api/user/steps")
 async def get_user_steps(request: Request):

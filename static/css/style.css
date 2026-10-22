@@ -1342,14 +1342,14 @@ body::before {
 }
 .modal-card {
     width: 100%;
-    max-width: 700px;
-    max-height: 88vh;
+    max-width: 840px;
+    max-height: 90vh;
     overflow-y: auto;
     background: var(--bg-surface-elevated);
     border: 1px solid var(--border-highlight);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-glass), 0 0 60px rgba(99, 102, 241, 0.15);
-    padding: 26px;
+    padding: 24px;
     animation: scaleUp 0.22s ease forwards;
 }
 @keyframes scaleUp {
@@ -1358,12 +1358,31 @@ body::before {
 }
 .modal-header {
     display: flex; justify-content: space-between; align-items: flex-start;
-    margin-bottom: 18px;
+    margin-bottom: 14px;
     border-bottom: 1px solid var(--border-subtle);
     padding-bottom: 14px;
+    gap: 12px;
 }
-.modal-header h3 { font-size: 1.2rem; font-weight: 800; }
-.modal-header .text-muted { font-size: 0.76rem; margin-top: 3px; word-break: break-all; }
+.modal-header h3 { font-size: 1.25rem; font-weight: 800; }
+.modal-header .text-muted { font-size: 0.78rem; margin-top: 3px; word-break: break-all; }
+.modal-header-meta {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; align-items: center;
+}
+.meta-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+    padding: 3px 9px;
+    border-radius: var(--radius-full);
+}
+.meta-pill.rank-pill {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.35);
+    color: #fde68a;
+    font-weight: 700;
+}
 .modal-close-btn {
     background: rgba(255,255,255,0.06);
     border: 1px solid var(--border-subtle);
@@ -1392,68 +1411,293 @@ body::before {
     gap: 12px;
 }
 
-.modal-stat-grid {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: 10px; margin-bottom: 14px;
+/* Modal Section Containers */
+.modal-section-card {
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 16px;
 }
-.modal-stat-box {
+.modal-section-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+}
+.pill-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.lang-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.32);
+    color: #c7d2fe;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+.topic-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(6, 182, 212, 0.10);
+    border: 1px solid rgba(6, 182, 212, 0.28);
+    color: #a5f3fc;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    font-size: 0.78rem;
+}
+
+/* High-level Overview Cards */
+.modal-overview-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.overview-stat-box {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border-subtle);
-    padding: 12px; border-radius: var(--radius-sm);
+    border-radius: var(--radius-sm);
+    padding: 12px 10px;
     text-align: center;
+    transition: transform 0.15s ease;
 }
-.modal-stat-box .val { font-size: 1.3rem; font-weight: 800; font-family: var(--font-mono); color: #fff; }
-.modal-stat-box .lbl { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 2px; }
+.overview-stat-box:hover { transform: translateY(-1px); }
+.overview-stat-box.highlight-score {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
+    border-color: rgba(99, 102, 241, 0.45);
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.12);
+}
+.overview-stat-box .val {
+    font-size: 1.35rem;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    color: #fff;
+    line-height: 1.1;
+}
+.overview-stat-box.highlight-score .val {
+    color: #a5b4fc;
+}
+.overview-stat-box .lbl {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 4px;
+}
 
+/* Difficulty Badges Row */
 .modal-diff-row {
-    display: grid; grid-template-columns: repeat(4, 1fr);
-    gap: 8px; margin-bottom: 16px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
 }
 .modal-diff-box {
     background: rgba(255,255,255,0.03);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
-    padding: 10px; text-align: center;
+    padding: 10px;
+    text-align: center;
 }
-.modal-diff-box.easy { border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.06); }
-.modal-diff-box.medium { border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.06); }
-.modal-diff-box.hard { border-color: rgba(244, 63, 94, 0.3); background: rgba(244, 63, 94, 0.06); }
-.diff-num { display: block; font-size: 1.4rem; font-weight: 800; font-family: var(--font-mono); color: #fff; }
+.modal-diff-box.easy { border-color: rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.07); }
+.modal-diff-box.medium { border-color: rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.07); }
+.modal-diff-box.hard { border-color: rgba(244, 63, 94, 0.35); background: rgba(244, 63, 94, 0.07); }
+.diff-num { display: block; font-size: 1.3rem; font-weight: 800; font-family: var(--font-mono); color: #fff; }
 .diff-lbl { font-size: 0.68rem; text-transform: uppercase; color: var(--text-muted); }
 
-.modal-multipliers {
-    background: rgba(255,255,255,0.02);
-    border: 1px solid var(--border-subtle);
-    padding: 14px; border-radius: var(--radius-sm);
-    margin-bottom: 16px;
+/* Transparent Formula Engine */
+.master-formula-box {
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: #e2e8f0;
+    line-height: 1.5;
 }
-.modal-multipliers h4 { font-size: 0.86rem; margin-bottom: 10px; }
-.multiplier-grid { display: flex; gap: 10px; flex-wrap: wrap; }
-.mult-item {
-    background: rgba(255,255,255,0.03);
+.master-formula-title {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent-cyan);
+    margin-bottom: 5px;
+    font-weight: 700;
+}
+.formula-step-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.formula-step-card {
+    background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
-    padding: 6px 10px;
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
-    min-width: 80px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
-.mult-label { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; }
-.mult-val { font-size: 0.88rem; font-weight: 800; font-family: var(--font-mono); color: var(--accent-cyan); }
+.formula-step-num {
+    font-size: 0.66rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--accent-cyan);
+    letter-spacing: 0.04em;
+}
+.formula-step-title {
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: #fff;
+}
+.formula-step-calc {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 6px 8px;
+    border-radius: 4px;
+    color: #fde047;
+    word-break: break-all;
+}
+.formula-step-note {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
 
-.modal-problems h4 { font-size: 0.88rem; margin-bottom: 10px; }
-.modal-problems-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.problem-chip {
+/* Final Calculation Equation Banner */
+.final-calc-banner {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(6, 182, 212, 0.12));
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+}
+.final-calc-eq {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: #e2e8f0;
+}
+.final-calc-result {
+    font-size: 1.35rem;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    color: #34d399;
+}
+
+/* Problem Search & Filter Toolbar */
+.problem-toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+}
+.problem-search-input {
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--border-subtle);
-    padding: 7px 10px; border-radius: var(--radius-sm);
-    font-size: 0.78rem; width: 100%;
+    color: #fff;
+    border-radius: var(--radius-sm);
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    flex: 1;
+    min-width: 200px;
+    max-width: 340px;
+    outline: none;
     transition: border-color 0.15s;
 }
-.problem-chip:hover { border-color: rgba(255,255,255,0.15); }
-.problem-chip-header { display: flex; align-items: center; gap: 7px; width: 100%; margin-bottom: 4px; }
-.problem-chip-name { font-weight: 600; flex: 1; }
-.problem-chip-meta {
-    display: flex; gap: 8px; font-size: 0.7rem; color: var(--text-muted); flex-wrap: wrap;
+.problem-search-input:focus {
+    border-color: var(--accent-primary);
+}
+.diff-filters {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.diff-filter-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    border-radius: var(--radius-full);
+    padding: 3px 10px;
+    font-size: 0.74rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.diff-filter-btn:hover {
+    color: #fff;
+    border-color: rgba(255,255,255,0.2);
+}
+.diff-filter-btn.active {
+    background: rgba(99, 102, 241, 0.22);
+    border-color: var(--accent-primary);
+    color: #fff;
+    font-weight: 700;
+}
+
+/* Problem Grid List */
+.modal-problems-scroll {
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.problem-grid-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 8px;
+}
+.problem-card {
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: border-color 0.15s, background 0.15s;
+}
+.problem-card:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.05);
+}
+.problem-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.problem-card-title {
+    font-weight: 600;
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+.problem-card-meta {
+    display: flex;
+    gap: 6px;
+    font-size: 0.69rem;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+    align-items: center;
 }
 .src-indexed { color: var(--accent-cyan); }
 .src-heuristic { color: var(--accent-emerald); }
@@ -1807,8 +2051,15 @@ body::before {
     .modal-diff-row {
         grid-template-columns: repeat(2, 1fr);
     }
-    .modal-stat-grid {
-        grid-template-columns: repeat(3, 1fr);
+    .modal-overview-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .formula-step-grid {
+        grid-template-columns: 1fr;
+    }
+    .problem-search-input {
+        max-width: 100%;
+        width: 100%;
     }
 
     .data-table th, .data-table td {
@@ -1871,11 +2122,15 @@ body::before {
         grid-template-columns: 1fr;
         gap: 8px;
     }
-    .modal-stat-grid {
+    .modal-overview-grid {
         grid-template-columns: 1fr;
     }
     .modal-diff-row {
         grid-template-columns: 1fr;
+    }
+    .final-calc-banner {
+        flex-direction: column;
+        align-items: flex-start;
     }
     .result-stats-grid {
         grid-template-columns: 1fr;
