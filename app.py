@@ -32,7 +32,8 @@ load_dotenv()
 # Import SQLAlchemy Models, Database Session, Init & Engine Info
 from database import (
     get_db, init_db, User, Submission, UserNote, AnalyzedCommit, AnalyzedProblem,
-    AnalysisJob, bulk_upsert_analyzed_problems, bulk_upsert_analyzed_commits,
+    AnalysisJob, SystemSetting, get_system_setting, set_system_setting,
+    bulk_upsert_analyzed_problems, bulk_upsert_analyzed_commits,
     DB_BACKEND, IS_PRODUCTION
 )
 
@@ -1217,6 +1218,19 @@ def analyze_repo_holistic(
 # ---------------------------------------------------------------------------
 # 24-Hour Scheduled Background Worker (GMT +5:30 at 7:00 PM)
 # ---------------------------------------------------------------------------
+# 24-Hour Scheduled Background Worker & Tracking (GMT +5:30 at 7:00 PM)
+# ---------------------------------------------------------------------------
+SCHEDULED_REFRESH_STATE: Dict[str, Any] = {
+    "is_running": False,
+    "current_index": 0,
+    "total_repos": 0,
+    "current_repo": "",
+    "last_run_at": None,
+    "last_refreshed_count": 0,
+    "last_run_date": None,
+    "error": None
+}
+
 def get_seconds_until_next_ist_7pm() -> Tuple[float, datetime, datetime]:
     """Calculate seconds until next 7:00 PM in Indian Standard Time (GMT+5:30)."""
     ist_offset = timedelta(hours=5, minutes=30)
@@ -1230,36 +1244,105 @@ def get_seconds_until_next_ist_7pm() -> Tuple[float, datetime, datetime]:
     diff = (target_ist - now_ist).total_seconds()
     return diff, now_ist, target_ist
 
+def get_most_recent_ist_7pm_cutoff() -> Tuple[str, datetime]:
+    """Returns (date_str_ist, cutoff_utc_datetime) for the most recent 7:00 PM IST cutoff."""
+    ist_offset = timedelta(hours=5, minutes=30)
+    now_utc = datetime.now(timezone.utc)
+    now_ist = now_utc + ist_offset
+
+    if now_ist.hour >= 19:
+        cutoff_ist = now_ist.replace(hour=19, minute=0, second=0, microsecond=0)
+    else:
+        cutoff_ist = (now_ist - timedelta(days=1)).replace(hour=19, minute=0, second=0, microsecond=0)
+
+    cutoff_utc = cutoff_ist - ist_offset
+    return cutoff_ist.strftime("%Y-%m-%d"), cutoff_utc
+
 async def run_scheduled_refresh_all_repos() -> int:
     """Incrementally analyze and update all registered active repositories."""
+    if SCHEDULED_REFRESH_STATE["is_running"]:
+        logger.info("Scheduled refresh is already currently running. Skipping duplicate call.")
+        return 0
+
+    SCHEDULED_REFRESH_STATE["is_running"] = True
+    SCHEDULED_REFRESH_STATE["error"] = None
     logger.info("Executing scheduled refresh for all registered repositories...")
+
     with get_db() as session:
-        active_submissions = session.query(Submission.repo_url).filter(Submission.is_deleted == 0).all()
-        repo_urls = [row[0] for row in active_submissions]
+        active_submissions = session.query(Submission.id, Submission.repo_url).filter(Submission.is_deleted == 0).all()
+        repo_items = [(row[0], row[1]) for row in active_submissions]
+
+    SCHEDULED_REFRESH_STATE["total_repos"] = len(repo_items)
+    SCHEDULED_REFRESH_STATE["current_index"] = 0
 
     updated_count = 0
-    for url in repo_urls:
-        try:
-            stats = await asyncio.to_thread(analyze_repo_holistic, url)
-            with get_db() as session:
-                sub = session.query(Submission).filter(Submission.repo_url == url).first()
-                if sub:
-                    sub.score = stats["score"]
-                    sub.problems = stats["problems"]
-                    sub.active_days = stats["active_days"]
-                    sub.easy_count = stats["easy_count"]
-                    sub.medium_count = stats["medium_count"]
-                    sub.hard_count = stats["hard_count"]
-                    sub.languages = stats["languages"]
-                    sub.topics_covered = stats["topics_covered"]
-                    sub.breakdown_json = json.dumps(stats["breakdown"])
-                    sub.updated_at = datetime.utcnow()
-                    updated_count += 1
-        except Exception as e:
-            logger.error(f"Error during scheduled refresh for {url}: {str(e)}")
+    try:
+        for idx, (sub_id, url) in enumerate(repo_items, 1):
+            SCHEDULED_REFRESH_STATE["current_index"] = idx
+            SCHEDULED_REFRESH_STATE["current_repo"] = url
+            try:
+                stats = await asyncio.to_thread(analyze_repo_holistic, url)
+                with get_db() as session:
+                    sub = session.query(Submission).filter(Submission.id == sub_id).first()
+                    if not sub:
+                        sub = session.query(Submission).filter(Submission.repo_url == url).first()
+                    if sub:
+                        sub.score = stats["score"]
+                        sub.problems = stats["problems"]
+                        sub.active_days = stats["active_days"]
+                        sub.easy_count = stats["easy_count"]
+                        sub.medium_count = stats["medium_count"]
+                        sub.hard_count = stats["hard_count"]
+                        sub.languages = stats["languages"]
+                        sub.topics_covered = stats["topics_covered"]
+                        sub.breakdown_json = json.dumps(stats["breakdown"])
+                        sub.updated_at = datetime.utcnow()
+                        updated_count += 1
+            except Exception as e:
+                logger.error(f"Error during scheduled refresh for {url} (ID: {sub_id}): {str(e)}")
 
-    logger.info(f"Scheduled 7:00 PM IST refresh completed. Refreshed {updated_count}/{len(repo_urls)} repositories.")
+        now_iso = datetime.utcnow().isoformat()
+        cutoff_date_str, _ = get_most_recent_ist_7pm_cutoff()
+        SCHEDULED_REFRESH_STATE["last_run_at"] = now_iso
+        SCHEDULED_REFRESH_STATE["last_refreshed_count"] = updated_count
+        SCHEDULED_REFRESH_STATE["last_run_date"] = cutoff_date_str
+
+        # Persist schedule timestamp in DB so it survives server suspensions/restarts
+        try:
+            with get_db() as session:
+                set_system_setting(session, "last_scheduled_refresh_at", now_iso)
+                set_system_setting(session, "last_scheduled_refresh_date", cutoff_date_str)
+                set_system_setting(session, "last_refreshed_count", str(updated_count))
+        except Exception as e:
+            logger.warning(f"Could not persist schedule settings to DB: {e}")
+
+        logger.info(f"Scheduled 7:00 PM IST refresh completed. Refreshed {updated_count}/{len(repo_items)} repositories.")
+    except Exception as e:
+        SCHEDULED_REFRESH_STATE["error"] = str(e)
+        logger.error(f"Scheduled refresh encountered critical error: {e}")
+    finally:
+        SCHEDULED_REFRESH_STATE["is_running"] = False
+        SCHEDULED_REFRESH_STATE["current_repo"] = ""
+
     return updated_count
+
+async def check_and_run_missed_scheduled_refresh():
+    """Detect if 7:00 PM IST refresh was missed while server was asleep/suspended on Render, and run it."""
+    await asyncio.sleep(4)  # Allow DB to establish on cold boot
+    cutoff_date_str, _ = get_most_recent_ist_7pm_cutoff()
+    try:
+        with get_db() as session:
+            last_date = get_system_setting(session, "last_scheduled_refresh_date")
+        if last_date != cutoff_date_str:
+            logger.warning(
+                f"Missed scheduled refresh detected! Most recent cutoff: {cutoff_date_str} (Last run: {last_date}). "
+                f"Server was likely asleep on Render. Running automatic background refresh now..."
+            )
+            await run_scheduled_refresh_all_repos()
+        else:
+            logger.info(f"Daily refresh for cutoff {cutoff_date_str} is already completed. No catchup needed.")
+    except Exception as e:
+        logger.error(f"Error checking for missed scheduled refresh on startup: {e}")
 
 async def daily_scheduler_loop():
     """Background daemon sleeping until 7:00 PM IST (GMT+5:30) and running daily refresh."""
@@ -1281,14 +1364,16 @@ async def daily_scheduler_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Launch background scheduler
+    # Startup: Check missed refresh (Render sleeping workaround) and launch background daemon
+    missed_task = asyncio.create_task(check_and_run_missed_scheduled_refresh())
     scheduler_task = asyncio.create_task(daily_scheduler_loop())
     yield
     # Shutdown
+    missed_task.cancel()
     scheduler_task.cancel()
     try:
-        await scheduler_task
-    except asyncio.CancelledError:
+        await asyncio.gather(missed_task, scheduler_task, return_exceptions=True)
+    except Exception:
         pass
 
 # ---------------------------------------------------------------------------
@@ -1394,6 +1479,11 @@ async def get_config():
 async def get_schedule_status():
     """Return live status of the 7:00 PM IST (GMT+5:30) daily refresh."""
     diff_secs, now_ist, target_ist = get_seconds_until_next_ist_7pm()
+    with get_db() as session:
+        last_run_at = get_system_setting(session, "last_scheduled_refresh_at")
+        last_refreshed_count = get_system_setting(session, "last_refreshed_count", "0")
+        last_date = get_system_setting(session, "last_scheduled_refresh_date")
+
     return {
         "timezone": "GMT+5:30 (IST)",
         "target_time": "19:00:00 (7:00 PM IST)",
@@ -1401,7 +1491,16 @@ async def get_schedule_status():
         "next_run_ist": target_ist.strftime("%Y-%m-%d 19:00:00 IST"),
         "seconds_remaining": int(diff_secs),
         "hours_remaining": int(diff_secs // 3600),
-        "minutes_remaining": int((diff_secs % 3600) // 60)
+        "minutes_remaining": int((diff_secs % 3600) // 60),
+        "is_running": SCHEDULED_REFRESH_STATE["is_running"],
+        "refresh_progress": {
+            "current_index": SCHEDULED_REFRESH_STATE["current_index"],
+            "total_repos": SCHEDULED_REFRESH_STATE["total_repos"],
+            "current_repo": SCHEDULED_REFRESH_STATE["current_repo"],
+        },
+        "last_run_at": last_run_at or SCHEDULED_REFRESH_STATE.get("last_run_at"),
+        "last_refreshed_count": int(last_refreshed_count or SCHEDULED_REFRESH_STATE.get("last_refreshed_count", 0)),
+        "last_run_date": last_date
     }
 
 # ---------------------------------------------------------------------------
@@ -1409,7 +1508,7 @@ async def get_schedule_status():
 # ---------------------------------------------------------------------------
 ACTIVE_JOBS: Dict[str, Dict[str, Any]] = {}
 
-async def run_analysis_job(job_id: str, repo_url: str, user_email: str, user_name: str):
+async def run_analysis_job(job_id: str, repo_url: str, user_email: str, user_name: str, repo_id: Optional[int] = None):
     """Asynchronous background worker executing full repository analysis with live progress."""
     logger.info(f"[Job {job_id}] Started background analysis worker for {repo_url} ({user_email})")
 
@@ -1438,7 +1537,14 @@ async def run_analysis_job(job_id: str, repo_url: str, user_email: str, user_nam
 
         # Update submission in database
         with get_db() as session:
-            sub = session.query(Submission).filter(Submission.repo_url == repo_url).first()
+            sub = None
+            if repo_id:
+                sub = session.query(Submission).filter(Submission.id == repo_id).first()
+            if not sub:
+                sub = session.query(Submission).filter(func.lower(Submission.repo_url) == repo_url.lower()).first()
+            if not sub and stats.get("clean_url"):
+                sub = session.query(Submission).filter(func.lower(Submission.repo_url) == stats["clean_url"].lower()).first()
+
             if sub:
                 sub.repo_name = stats["name"]
                 sub.submitted_by_email = user_email
@@ -1519,10 +1625,47 @@ async def admin_trigger_refresh(request: Request):
     admin_user = require_admin_user(request)
     admin_email = admin_user["email"]
     logger.info(f"Manual background refresh triggered by admin: {admin_email}")
+
+    if SCHEDULED_REFRESH_STATE["is_running"]:
+        return {
+            "success": True,
+            "message": "Incremental refresh is already currently running in the background.",
+            "already_running": True
+        }
+
     asyncio.create_task(run_scheduled_refresh_all_repos())
     return {
         "success": True,
-        "message": "Incremental refresh started in the background for all registered repositories."
+        "message": "Incremental refresh started in the background for all registered repositories.",
+        "already_running": False
+    }
+
+@app.api_route("/api/cron/daily-refresh", methods=["GET", "POST"])
+async def cron_daily_refresh(request: Request, secret: Optional[str] = None):
+    """External cron trigger (GitHub Actions, cron-job.org, Render cron) to run daily refresh and keep server awake."""
+    cron_secret = os.getenv("CRON_SECRET", "").strip()
+    auth_header = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+    provided_secret = secret or auth_header or request.query_params.get("secret", "")
+
+    if cron_secret and provided_secret != cron_secret:
+        raise HTTPException(status_code=403, detail="Invalid cron secret.")
+
+    if SCHEDULED_REFRESH_STATE["is_running"]:
+        return {
+            "success": True,
+            "message": "Scheduled refresh already in progress.",
+            "status": "running",
+            "progress": {
+                "current": SCHEDULED_REFRESH_STATE["current_index"],
+                "total": SCHEDULED_REFRESH_STATE["total_repos"]
+            }
+        }
+
+    asyncio.create_task(run_scheduled_refresh_all_repos())
+    return {
+        "success": True,
+        "message": "Scheduled refresh initiated successfully in the background.",
+        "status": "started"
     }
 
 @app.post("/api/auth/google")
@@ -1903,15 +2046,17 @@ async def refresh_repo(repo_id: int, request: Request):
             raise HTTPException(status_code=403, detail="Permission denied. You can only refresh your own repository.")
 
         clean_url = repo.repo_url
-        user_name = user.get("name", "User")
+        repo_name = repo.repo_name
+        repo_owner_email = repo.submitted_by_email or user_email
+        repo_owner_name = repo.submitted_by_name or user.get("name", "User")
 
     # Queue or run analysis job
     job_id = f"job_{uuid.uuid4().hex[:12]}"
     job_record = {
         "job_id": job_id,
         "repo_url": clean_url,
-        "submitted_by_email": user_email,
-        "submitted_by_name": user_name,
+        "submitted_by_email": repo_owner_email,
+        "submitted_by_name": repo_owner_name,
         "status": "queued",
         "progress_stage": "Queued for refresh",
         "progress_percent": 5,
@@ -1919,13 +2064,30 @@ async def refresh_repo(repo_id: int, request: Request):
         "updated_at": datetime.utcnow().isoformat()
     }
     ACTIVE_JOBS[job_id] = job_record
-    asyncio.create_task(run_analysis_job(job_id, clean_url, user_email, user_name))
+
+    # Persist job record in DB so it survives restarts and active-job queries
+    try:
+        with get_db() as session:
+            db_job = AnalysisJob(
+                id=job_id,
+                repo_url=clean_url,
+                submitted_by_email=repo_owner_email,
+                submitted_by_name=repo_owner_name,
+                status="queued",
+                progress_stage="Queued for refresh",
+                progress_percent=5
+            )
+            session.add(db_job)
+    except Exception as e:
+        logger.warning(f"Could not write initial refresh job record to DB: {e}")
+
+    asyncio.create_task(run_analysis_job(job_id, clean_url, repo_owner_email, repo_owner_name, repo_id=repo_id))
 
     return {
         "success": True,
         "job_id": job_id,
         "status": "queued",
-        "message": f"Refresh initiated for repository '{repo.repo_name}'.",
+        "message": f"Refresh initiated for repository '{repo_name}'.",
         "repo_url": clean_url
     }
 

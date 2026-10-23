@@ -200,6 +200,37 @@ class AnalysisJob(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+
+    key = Column(String(64), primary_key=True)
+    value = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+def get_system_setting(session: Session, key: str, default: Optional[str] = None) -> Optional[str]:
+    """Retrieve system setting value by key."""
+    try:
+        row = session.query(SystemSetting).filter(SystemSetting.key == key).first()
+        return row.value if row else default
+    except Exception:
+        return default
+
+
+def set_system_setting(session: Session, key: str, value: str) -> None:
+    """Set or update a system setting value."""
+    try:
+        row = session.query(SystemSetting).filter(SystemSetting.key == key).first()
+        if row:
+            row.value = value
+            row.updated_at = datetime.utcnow()
+        else:
+            row = SystemSetting(key=key, value=value)
+            session.add(row)
+    except Exception as e:
+        logger.warning(f"Failed to persist system setting {key}: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Database Upsert Helpers (Zero Duplicate Key Violations)
 # ---------------------------------------------------------------------------

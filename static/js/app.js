@@ -483,16 +483,36 @@ function renderLeaderboard(items) {
                         'Authorization': `Bearer ${state.token}`
                     }
                 });
-                const data = await res.json();
-                if (data.success && data.job_id) {
-                    pollJobProgress(data.job_id, repoUrl);
+
+                let data = null;
+                try {
+                    data = await res.json();
+                } catch (jsonErr) {
+                    throw new Error(`Server returned status ${res.status}`);
+                }
+
+                if (res.status === 401) {
+                    showToast('Session expired. Please sign in with Google again.', true);
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                    return;
+                }
+
+                if (res.ok && data && data.success && data.job_id) {
+                    showToast(`Incremental analysis queued for '${repoName}'...`);
+                    pollJobProgress(data.job_id, repoUrl, () => {
+                        btn.disabled = false;
+                        btn.innerHTML = origHtml;
+                    });
                 } else {
-                    showToast(data.detail || 'Refresh request failed', true);
+                    showToast((data && data.detail) || 'Refresh request failed', true);
                     btn.disabled = false;
                     btn.innerHTML = origHtml;
                 }
             } catch (err) {
-                showToast('Network error during refresh', true);
+                console.error('Row refresh error:', err);
+                const msg = err.message && !err.message.includes('fetch') ? err.message : 'Network error during refresh';
+                showToast(msg, true);
                 btn.disabled = false;
                 btn.innerHTML = origHtml;
             }
@@ -901,22 +921,37 @@ function openBreakdownModal(item) {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${state.token}` }
                 });
-                const data = await res.json();
-                if (res.ok) {
+
+                let data = null;
+                try {
+                    data = await res.json();
+                } catch (jsonErr) {
+                    throw new Error(`Server returned status ${res.status}`);
+                }
+
+                if (res.status === 401) {
+                    showToast('Session expired. Please sign in with Google again.', true);
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                    return;
+                }
+
+                if (res.ok && data && data.success && data.job_id) {
                     showToast('Refresh initiated! Polling for updated stats...');
-                    pollJobProgress(data.job_id, async () => {
+                    pollJobProgress(data.job_id, item.repo_url, async () => {
                         await loadLeaderboard();
                         closeModal();
                         showToast('Repository refresh complete! Updated score reflected.');
                     });
                 } else {
-                    showToast(data.detail || 'Failed to refresh repository', true);
+                    showToast((data && data.detail) || 'Failed to refresh repository', true);
                     btn.disabled = false;
                     btn.innerHTML = origHtml;
                 }
             } catch (err) {
-                console.error('Refresh error:', err);
-                showToast('Network error while refreshing repository', true);
+                console.error('Modal refresh error:', err);
+                const msg = err.message && !err.message.includes('fetch') ? err.message : 'Network error while refreshing repository';
+                showToast(msg, true);
                 btn.disabled = false;
                 btn.innerHTML = origHtml;
             }
@@ -1032,6 +1067,7 @@ async function checkMySyncedRepo() {
             e.preventDefault();
             const btn = document.getElementById('banner-refresh-btn');
             if (!btn) return;
+            const origHtml = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Refreshing...`;
             showToast('Refreshing repository commits and score...');
@@ -1042,18 +1078,37 @@ async function checkMySyncedRepo() {
                         'Authorization': `Bearer ${state.token}`
                     }
                 });
-                const data = await res.json();
-                if (data.success && data.job_id) {
-                    pollJobProgress(data.job_id, repo.repo_url);
-                } else {
-                    showToast(data.detail || 'Refresh failed', true);
+
+                let data = null;
+                try {
+                    data = await res.json();
+                } catch (jsonErr) {
+                    throw new Error(`Server returned status ${res.status}`);
+                }
+
+                if (res.status === 401) {
+                    showToast('Session expired. Please sign in with Google again.', true);
                     btn.disabled = false;
-                    btn.innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Refresh Commits`;
+                    btn.innerHTML = origHtml;
+                    return;
+                }
+
+                if (res.ok && data && data.success && data.job_id) {
+                    pollJobProgress(data.job_id, repo.repo_url, () => {
+                        btn.disabled = false;
+                        btn.innerHTML = origHtml;
+                    });
+                } else {
+                    showToast((data && data.detail) || 'Refresh failed', true);
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
                 }
             } catch (err) {
-                showToast('Network error during refresh', true);
+                console.error('Banner refresh error:', err);
+                const msg = err.message && !err.message.includes('fetch') ? err.message : 'Network error during refresh';
+                showToast(msg, true);
                 btn.disabled = false;
-                btn.innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Refresh Commits`;
+                btn.innerHTML = origHtml;
             }
         });
 
@@ -1083,9 +1138,24 @@ document.getElementById('leaderboard-search')?.addEventListener('input', (e) => 
     renderLeaderboard(filtered);
 });
 
-document.getElementById('refresh-leaderboard-btn')?.addEventListener('click', () => {
-    loadLeaderboard();
-    showToast('Leaderboard refreshed');
+document.getElementById('refresh-leaderboard-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('refresh-leaderboard-btn');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-arrows-rotate fa-spin"></i> Refreshing...`;
+    }
+    try {
+        await loadLeaderboard();
+        showToast('Leaderboard refreshed');
+    } catch (e) {
+        console.error('Refresh leaderboard error:', e);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+        }
+    }
 });
 
 // --------------------------------------------------------------------------
@@ -1177,7 +1247,10 @@ function setSubmitButtonState(isBusy) {
     }
 }
 
-async function pollAnalysisJob(jobId, repoUrl) {
+async function pollJobProgress(jobId, repoUrlOrCallback, onComplete) {
+    let repoUrl = typeof repoUrlOrCallback === 'string' ? repoUrlOrCallback : '';
+    let callback = typeof repoUrlOrCallback === 'function' ? repoUrlOrCallback : onComplete;
+
     if (currentJobPollInterval) {
         clearInterval(currentJobPollInterval);
         currentJobPollInterval = null;
@@ -1199,6 +1272,9 @@ async function pollAnalysisJob(jobId, repoUrl) {
                     currentJobPollInterval = null;
                     setSubmitButtonState(false);
                     renderJobError('Polling timed out. The analysis is continuing on the server; please refresh in a moment.');
+                    if (typeof callback === 'function') {
+                        try { await callback(null, 'Polling timed out'); } catch (cbE) {}
+                    }
                 }
                 return;
             }
@@ -1208,12 +1284,23 @@ async function pollAnalysisJob(jobId, repoUrl) {
                 clearInterval(currentJobPollInterval);
                 currentJobPollInterval = null;
                 setSubmitButtonState(false);
-                showToast('Holistic analysis complete!');
-                renderJobResult(data.stats);
+                showToast('Repository analysis complete! Updated score reflected.');
+                if (data.stats) {
+                    renderJobResult(data.stats);
+                }
                 const input = document.getElementById('repo-url-input');
                 if (input) input.value = '';
-                loadLeaderboard();
-                checkMySyncedRepo();
+
+                await loadLeaderboard();
+                await checkMySyncedRepo();
+
+                if (typeof callback === 'function') {
+                    try {
+                        await callback(data.stats);
+                    } catch (cbErr) {
+                        console.error('onComplete callback error:', cbErr);
+                    }
+                }
             } else if (data.status === 'failed') {
                 clearInterval(currentJobPollInterval);
                 currentJobPollInterval = null;
@@ -1221,6 +1308,11 @@ async function pollAnalysisJob(jobId, repoUrl) {
                 const errMsg = data.error || 'Repository analysis failed.';
                 renderJobError(errMsg);
                 showToast(errMsg, true);
+                if (typeof callback === 'function') {
+                    try {
+                        await callback(null, errMsg);
+                    } catch (cbErr) {}
+                }
             } else {
                 // queued or analyzing
                 const percent = Math.min(95, Math.max(10, data.progress_percent || 15));
@@ -1238,6 +1330,11 @@ async function pollAnalysisJob(jobId, repoUrl) {
         }
     }, 2000);
 }
+
+// Global aliases to ensure all refresh callers and submit actions work reliably
+const pollAnalysisJob = pollJobProgress;
+window.pollJobProgress = pollJobProgress;
+window.pollAnalysisJob = pollJobProgress;
 
 async function checkActiveUserJob() {
     if (!state.user || !state.token) return;
@@ -1309,6 +1406,36 @@ function initEventListeners() {
     }
 
     // Admin manual trigger refresh button
+    let adminRefreshPollInterval = null;
+    function pollAdminRefreshProgress(btn) {
+        if (adminRefreshPollInterval) clearInterval(adminRefreshPollInterval);
+        const origHtml = `<i class="fa-solid fa-bolt"></i> Run Refresh Now`;
+
+        adminRefreshPollInterval = setInterval(async () => {
+            try {
+                const res = await fetch('/api/schedule/status');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.is_running) {
+                    const prog = data.refresh_progress || {};
+                    const cur = prog.current_index || 0;
+                    const tot = prog.total_repos || '?';
+                    btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Refreshing (${cur}/${tot})...`;
+                } else {
+                    clearInterval(adminRefreshPollInterval);
+                    adminRefreshPollInterval = null;
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                    showToast(`Incremental refresh completed! ${data.last_refreshed_count || 'All'} repositories updated.`);
+                    await loadLeaderboard();
+                    initScheduleTimer();
+                }
+            } catch (e) {
+                console.warn('Error polling admin refresh status:', e);
+            }
+        }, 2500);
+    }
+
     document.getElementById('admin-trigger-refresh-btn')?.addEventListener('click', async () => {
         if (!state.token) {
             showToast('Admin authorization required', true);
@@ -1316,7 +1443,7 @@ function initEventListeners() {
         }
         const btn = document.getElementById('admin-trigger-refresh-btn');
         btn.disabled = true;
-        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Refreshing All...`;
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Starting Refresh...`;
         showToast('Incremental refresh started in background for all repositories...');
 
         try {
@@ -1324,21 +1451,27 @@ function initEventListeners() {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${state.token}` }
             });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                showToast(data.message);
-                loadLeaderboard();
-                initScheduleTimer();
-            } else {
-                showToast(data.detail || 'Failed to trigger refresh', true);
+            let data = null;
+            try {
+                data = await res.json();
+            } catch (jsonErr) {
+                throw new Error(`Server returned status ${res.status}`);
             }
-        } catch (e) {
-            showToast('Network error during refresh trigger', true);
-        } finally {
-            setTimeout(() => {
+
+            if (res.ok && data && data.success) {
+                showToast(data.message);
+                pollAdminRefreshProgress(btn);
+            } else {
+                showToast((data && data.detail) || 'Failed to trigger refresh', true);
                 btn.disabled = false;
                 btn.innerHTML = `<i class="fa-solid fa-bolt"></i> Run Refresh Now`;
-            }, 3000);
+            }
+        } catch (e) {
+            console.error('Admin refresh trigger error:', e);
+            const msg = e.message && !e.message.includes('fetch') ? e.message : 'Network error during refresh trigger';
+            showToast(msg, true);
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-bolt"></i> Run Refresh Now`;
         }
     });
 }

@@ -1,0 +1,45 @@
+name: Daily 7:00 PM IST Automated Refresh & Keep-Alive
+
+on:
+  schedule:
+    # 13:30 UTC = 19:00 (7:00 PM) Indian Standard Time (IST)
+    - cron: '30 13 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions UI anytime
+
+jobs:
+  trigger-refresh:
+    name: Ping Production Refresh Webhook
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Incremental Daily Refresh
+        run: |
+          PROD_URL="${{ secrets.PRODUCTION_URL || 'https://pdsa-ta-t32026.onrender.com
+          ' }}"
+          CRON_SECRET="${{ secrets.CRON_SECRET || '' }}"
+          
+          echo "Triggering 7:00 PM IST refresh at $PROD_URL/api/cron/daily-refresh..."
+          
+          if [ -n "$CRON_SECRET" ]; then
+            HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$PROD_URL/api/cron/daily-refresh?secret=$CRON_SECRET" \
+              -H "Content-Type: application/json" \
+              --max-time 120)
+          else
+            HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$PROD_URL/api/cron/daily-refresh" \
+              -H "Content-Type: application/json" \
+              --max-time 120)
+          fi
+          
+          BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+          STATUS_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
+          
+          echo "Status Code: $STATUS_CODE"
+          echo "Response: $BODY"
+          
+          if [ "$STATUS_CODE" -ge 200 ] && [ "$STATUS_CODE" -lt 300 ]; then
+            echo "Successfully initiated 7:00 PM IST refresh!"
+            exit 0
+          else
+            echo "Refresh request failed or server cold-starting. Retrying once after 20s..."
+            sleep 20
+            curl -f -s -X POST "$PROD_URL/api/cron/daily-refresh" || true
+          fi
