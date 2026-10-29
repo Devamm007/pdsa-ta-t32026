@@ -77,11 +77,11 @@ Unlike naive commit-counting scripts that can be gamed by artificial commit spam
    - **Medium:** 2.5 pts
    - **Hard:** 5.0 pts
 3. **Anti-Burst Consistency Curve (Diminishing Burst Returns):**
-   $$\text{Daily Credit} = \min(25, \text{Daily Points})^{0.72}$$
+   `Daily Credit = min(25, Daily Points)^0.72`
    - Solving 2 problems daily across 15 days yields a significantly higher score than dumping 30 problems in a single afternoon.
 4. **Holistic Calibrated Multipliers:**
-   - **Active Day Cadence Multiplier:** $1.0 + \min(0.40, \text{active\_days} \times 0.03)$ (up to +40%)
-   - **Breadth Multiplier:** $1.0 + \min(0.30, \text{unique\_problems} \times 0.015)$ (up to +30%)
+   - **Active Day Cadence Multiplier:** `1.0 + min(0.40, active_days * 0.03)` (up to +40%)
+   - **Breadth Multiplier:** `1.0 + min(0.30, unique_problems * 0.015)` (up to +30%)
    - **Topic Diversity Bonus (+6%):** Rewarded for covering 3+ distinct DSA topics.
    - **Polyglot Multiplier (+5%):** Rewarded for multi-language solutions (e.g. Python + C++).
    - **Documentation Bonus (+4%):** Rewarded for algorithmic notes and README documentation.
